@@ -1,6 +1,52 @@
 import 'package:flutter/material.dart';
 import 'create_post_bottom_sheet.dart'; // Import your bottom sheet widget
 
+// Post Model
+class Post {
+  final String userName;
+  final String userImage;
+  final String postContent;
+  final int likes;
+  final int comments;
+
+  Post({required this.userName, required this.userImage, required this.postContent, required this.likes, required this.comments});
+}
+
+// Post Widget
+class PostWidget extends StatelessWidget {
+  final Post post;
+
+  const PostWidget({Key? key, required this.post}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.all(8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            leading: CircleAvatar(backgroundImage: NetworkImage(post.userImage)),
+            title: Text(post.userName),
+            subtitle: Text(post.postContent),
+          ),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Text('${post.likes} Likes'),
+                Text('${post.comments} Comments'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Home Page
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -8,9 +54,14 @@ class HomePage extends StatefulWidget {
   _HomePageState createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage>
-    with SingleTickerProviderStateMixin {
+class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+
+  List<Post> posts = [
+    Post(userName: 'Iris', userImage: 'path_to_iris_image', postContent: 'Are you Ready to build the next big mobile app? Join our Mobile Development workshop.', likes: 77, comments: 118),
+    Post(userName: 'Rosé', userImage: 'path_to_rose_image', postContent: 'Learn to create stunning UIs, handle logins, and model with Firebase and Realtime Database.', likes: 77, comments: 118),
+    // Add more posts here...
+  ];
 
   @override
   void initState() {
@@ -126,7 +177,12 @@ class _HomePageState extends State<HomePage>
       body: TabBarView(
         controller: _tabController,
         children: [
-          Center(child: const Text('Club Page Content')),
+          ListView.builder(
+            itemCount: posts.length,
+            itemBuilder: (context, index) {
+              return PostWidget(post: posts[index]);
+            },
+          ),
           Center(child: const Text('Social Page Content')),
         ],
       ),
