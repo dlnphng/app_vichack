@@ -1,3 +1,5 @@
+import 'package:app_vichack/pages/login_page.dart';
+import 'package:app_vichack/pages/signup_page.dart';
 import 'package:flutter/material.dart';
 import 'pages/home_page.dart';
 
@@ -26,7 +28,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: const HomePage(), //first page to be home page rn instead of login
+      home: const SignupPage(), 
     );
   }
 }
