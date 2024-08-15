@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'custom_drawer.dart';  // Import your custom drawer widget
 import 'create_post_bottom_sheet.dart'; // Import your bottom sheet widget
 
 // Post Model
@@ -9,41 +10,19 @@ class Post {
   final int likes;
   final int comments;
 
-  Post({
-    required this.userName,
-    required this.userImage,
-    required this.postContent,
-    required this.likes,
-    required this.comments,
-  });
+  Post({required this.userName, required this.userImage, required this.postContent, required this.likes, required this.comments});
 }
 
 // Post Widget
 class PostWidget extends StatelessWidget {
   final Post post;
 
-  // Custom color defined as a constant
-  static const Color postBackgroundColor = Color(0xFFFFEEDD);
-
   const PostWidget({Key? key, required this.post}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Card(
       margin: EdgeInsets.all(8),
-      padding: EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: postBackgroundColor, // Use the custom color
-        borderRadius: BorderRadius.circular(8), // Optional: for rounded corners
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.3),
-            spreadRadius: 2,
-            blurRadius: 4,
-            offset: Offset(0, 3), // Shadow direction
-          ),
-        ],
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -82,11 +61,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   List<Post> posts = [
     Post(userName: 'Iris', userImage: 'path_to_iris_image', postContent: 'Are you Ready to build the next big mobile app? Join our Mobile Development workshop.', likes: 77, comments: 118),
     Post(userName: 'Rosé', userImage: 'path_to_rose_image', postContent: 'Learn to create stunning UIs, handle logins, and model with Firebase and Realtime Database.', likes: 77, comments: 118),
-    Post(userName: 'Alex', userImage: 'path_to_alex_image', postContent: 'Join our new workshop on Flutter and Dart.', likes: 53, comments: 45),
-    Post(userName: 'Jamie', userImage: 'path_to_jamie_image', postContent: 'Tips and tricks for effective state management in Flutter.', likes: 89, comments: 67),
-    Post(userName: 'Jordan', userImage: 'path_to_jordan_image', postContent: 'Explore new features in the latest Flutter release.', likes: 112, comments: 80),
-    Post(userName: 'Taylor', userImage: 'path_to_taylor_image', postContent: 'Creating responsive designs with Flutter.', likes: 94, comments: 90),
-    // Add more posts here if needed
+    // Add more posts here...
   ];
 
   @override
@@ -175,31 +150,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           ),
         ),
       ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(
-                color: Colors.black,
-              ),
-              child: Text('Drawer Header'),
-            ),
-            ListTile(
-              title: const Text('Item 1'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: const Text('Item 2'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        ),
-      ),
+      drawer: const CustomDrawer(), // Use the CustomDrawer widget here
       body: TabBarView(
         controller: _tabController,
         children: [
