@@ -1,7 +1,9 @@
 import 'package:app_vichack/pages/login_page.dart';
 import 'package:app_vichack/pages/signup_page.dart';
+import 'package:app_vichack/pages/profile_page.dart';
 import 'package:flutter/material.dart';
 import 'pages/home_page.dart';
+import 'pages/post_popup_page.dart';
 
 //Firebase initialization
 import 'package:firebase_auth/firebase_auth.dart';
@@ -19,7 +21,6 @@ void main() async {
   
   runApp(const MyApp());
 }
-
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -28,7 +29,8 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: const SignupPage(), 
+      // home: const SignupPage(), 
+      home: ProfilePage(), //first page to be home page rn instead of login
     );
   }
 }
