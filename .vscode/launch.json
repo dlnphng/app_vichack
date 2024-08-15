@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "C/C++ Runner: Debug Session",
+      "type": "lldb",
+      "request": "launch",
+      "args": [],
+      "cwd": "/Users/iris/Desktop/VicHack2024/app_vichack/windows/runner",
+      "program": "/Users/iris/Desktop/VicHack2024/app_vichack/windows/runner/build/Debug/outDebug"
+    }
+  ]
+}
