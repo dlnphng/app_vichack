@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:math'; // For max function
 
 class CreatePostBottomSheet extends StatefulWidget {
@@ -35,6 +37,35 @@ class _CreatePostBottomSheetState extends State<CreatePostBottomSheet> {
     });
   }
 
+void _submitPost() async {
+  if (_titleController.text.isEmpty || _contentController.text.isEmpty || _selectedCategory == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Please fill in all fields and select a category.")));
+    return;
+  }
+
+  CollectionReference posts = FirebaseFirestore.instance.collection('posts');
+
+  try {
+    // Add post details to Firestore without image URLs
+    await posts.add({
+      'title': _titleController.text,
+      'content': _contentController.text,
+      'category': _selectedCategory,
+      'timestamp': FieldValue.serverTimestamp(),
+      'likeNo': 0,
+      'cmtNo': 0,
+    });
+
+    Navigator.pop(context); // Close the bottom sheet after successful submission
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Post uploaded successfully!")));
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to upload post: ${e.toString()}")));
+    print("Error during post submission: $e");
+  }
+}
+
+
   Widget _buildImageList() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -56,12 +87,37 @@ class _CreatePostBottomSheetState extends State<CreatePostBottomSheet> {
     );
   }
 
+  String? _selectedCategory;
+
+  Widget _buildCategoryPicker() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        ElevatedButton(
+          onPressed: () => setState(() => _selectedCategory = 'Social'),
+          child: Text('Social', style: TextStyle(color: _selectedCategory == 'Social' ? Colors.white : Colors.black)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _selectedCategory == 'Social' ? Colors.blue : Colors.grey[300],  // Updated from 'primary'
+          ),
+        ),
+        ElevatedButton(
+          onPressed: () => setState(() => _selectedCategory = 'Club'),
+          child: Text('Club', style: TextStyle(color: _selectedCategory == 'Club' ? Colors.white : Colors.black)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _selectedCategory == 'Club' ? Colors.blue : Colors.grey[300],
+          ),
+        ),
+      ],
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
-      height: max(MediaQuery.of(context).size.height * 0.75, 500),  // Adjusted height
-      child: SingleChildScrollView(  // Ensure the entire content is scrollable
+      height: max(MediaQuery.of(context).size.height * 0.75, 500),
+      child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -88,6 +144,8 @@ class _CreatePostBottomSheetState extends State<CreatePostBottomSheet> {
               maxLines: 4,
             ),
             const SizedBox(height: 10),
+            _buildCategoryPicker(),
+            const SizedBox(height: 10),
             ElevatedButton(
               onPressed: _pickImage,
               child: const Text('Choose Pictures'),
@@ -100,11 +158,8 @@ class _CreatePostBottomSheetState extends State<CreatePostBottomSheet> {
             _images.isNotEmpty ? _buildImageList() : const Text("No images selected."),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: () {
-                // Handle submission logic here
-                Navigator.pop(context);
-              },
-              child: const Text('Submit Post'),
+              onPressed: _submitPost,
+              child: const Text('Upload'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
@@ -115,6 +170,7 @@ class _CreatePostBottomSheetState extends State<CreatePostBottomSheet> {
       ),
     );
   }
+
 
   @override
   void dispose() {
