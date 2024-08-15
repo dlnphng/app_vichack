@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
     // Use IntelliSense to learn about possible attributes.
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
@@ -22,4 +23,17 @@
             "flutterMode": "release"
         }
     ]
+=======
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "C/C++ Runner: Debug Session",
+      "type": "lldb",
+      "request": "launch",
+      "args": [],
+      "cwd": "/Users/iris/Desktop/VicHack2024/app_vichack/windows/runner",
+      "program": "/Users/iris/Desktop/VicHack2024/app_vichack/windows/runner/build/Debug/outDebug"
+    }
+  ]
+>>>>>>> origin/UserProfile
 }
