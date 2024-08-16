@@ -24,7 +24,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: _handleAuthState(), // 根据用户状态返回相应的页面
+      home: _handleAuthState(), // hadle first scrren 
     );
   }
 
