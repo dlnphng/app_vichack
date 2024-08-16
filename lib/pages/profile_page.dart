@@ -1,4 +1,8 @@
+import 'package:app_vichack/pages/login_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'home_page.dart'; // Import to use Post and PostCard
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -8,18 +12,128 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  String _userName = "Initial Name"; // Initial user name
-  String _userDescription = "Description: Iris, third year Monash student! balabalabalabalbalablabalblablbalbalablababbbbbbalabalbalablablablablablabalabla";
+  String _userName = "Loading..."; // Initial user name
+  String _userDescription = "Mystery person...";
+  List<Post> userPosts = [];
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+    fetchUserPosts();  // Fetch posts related to the current user
+  }
+
+  Future<void> _loadUserData() async {
+    try {
+      User? user = UserRepository.getCurrentUser();
+
+      if (user != null) {
+        DocumentSnapshot userDoc = await _firestore.collection('users').doc(user.uid).get();
+
+        if (userDoc.exists) {
+          Map<String, dynamic>? data = userDoc.data() as Map<String, dynamic>?;
+
+          String userName = data?['name'] ?? "No Name";
+          String userDescription = data?['description'] ?? "Mystery person...";
+
+          // 如果 description 字段不存在，将当前 _userDescription 保存到 Firestore
+          if (data != null && !data.containsKey('description')) {
+            userDescription = "Mystery person...";
+            await _firestore.collection('users').doc(user.uid).set({
+              'description': userDescription,
+            }, SetOptions(merge: true));
+          }
+
+          // 更新状态
+          setState(() {
+            _userName = userName;
+            _userDescription = userDescription;
+          });
+
+        } else {
+          // 如果用户文档不存在，创建一个新的文档并存储当前 _userDescription
+          String defaultUserName = "No User Data Found";
+          String defaultUserDescription = _userDescription;
+
+          await _firestore.collection('users').doc(user.uid).set({
+            'name': defaultUserName,
+            'description': defaultUserDescription,
+          });
+
+          setState(() {
+            _userName = defaultUserName;
+            _userDescription = defaultUserDescription;
+          });
+        }
+      } else {
+        setState(() {
+          _userName = "Guest";
+        });
+      }
+    } catch (e) {
+      print("Error loading user data: $e");
+      setState(() {
+        _userName = "Error loading user data";
+      });
+    }
+  }
+
+  void fetchUserPosts() async {
+    User? user = UserRepository.getCurrentUser();
+    if (user != null) {
+      var userPostsSnapshot = await _firestore.collection('posts')
+          .where('userId', isEqualTo: user.uid)
+          .get();
+      var fetchedPosts = userPostsSnapshot.docs.map((doc) => Post.fromFirestore(doc)).toList();
+
+      setState(() {
+        userPosts = fetchedPosts;
+      });
+    }
+  }
+
+  void firebaseUpdateUserDescription(String newDescription) async {
+    setState(() {
+      _userDescription = newDescription;
+    });
+
+    // Save the new description to Firestore
+    User? user = UserRepository.getCurrentUser();
+    if (user != null) {
+      await _firestore.collection('users').doc(user.uid).set({
+        'description': newDescription,
+      }, SetOptions(merge: true));
+    }
+  }
+
+  void firebaseUpdateUserName(String newName) async {
+    setState(() {
+      _userName = newName;
+    });
+
+    // Save the new name to Firestore
+    User? user = UserRepository.getCurrentUser();
+    if (user != null) {
+      await _firestore.collection('users').doc(user.uid).set({
+        'name': newName,
+      }, SetOptions(merge: true));
+    }
+  }
 
   void updateUserName(String newName) {
     setState(() {
       _userName = newName; // Update the user name
+      firebaseUpdateUserName(newName);
     });
   }
 
   void updateUserDescription(String newDescription) {
     setState(() {
       _userDescription = newDescription;
+      firebaseUpdateUserDescription(newDescription);
     });
   }
 
@@ -29,16 +143,13 @@ class _ProfilePageState extends State<ProfilePage> {
       backgroundColor: const Color(0xFFFAFAFA),
       body: Stack(
         children: [
-          // Scrollable content
           SingleChildScrollView(
             child: Column(
               children: [
-                // Stack to overlap CircleAvatar on background image
                 Stack(
-                  clipBehavior: Clip.none, // Ensure overflow is visible
-                  alignment: Alignment.center, // Align center
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
                   children: [
-                    // User page background image
                     SizedBox(
                       width: double.infinity,
                       height: MediaQuery.of(context).size.height * 0.33,
@@ -58,13 +169,10 @@ class _ProfilePageState extends State<ProfilePage> {
                         },
                       ),
                     ),
-                    // CircleAvatar overlapping the background image
                     Positioned(
-                      bottom: -20, // Position the CircleAvatar to overlap
+                      bottom: -20,
                       child: GestureDetector(
                         onTap: () {
-                          // Define action when the avatar is tapped
-                          print("Avatar tapped!");
                           _showEditDescriptionDialog(context);
                         },
                         child: const CircleAvatar(
@@ -76,15 +184,12 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ],
                 ),
-                
-                // Padding to account for the overlap
                 Padding(
                   padding: const EdgeInsets.only(
                     top: 30, left: 25, right: 25, bottom: 25),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Row to position the UserName and edit icon
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -95,24 +200,19 @@ class _ProfilePageState extends State<ProfilePage> {
                               fontSize: 20,
                             ),
                           ),
-
-                          // Edit username button
                           IconButton(
                             icon: const Icon(
-                              Icons.edit, 
-                              color: Colors.grey, 
-                              size: 15, // Set icon size
+                              Icons.edit,
+                              color: Colors.grey,
+                              size: 15,
                             ),
                             onPressed: () {
-                              // Show dialog to edit the username
                               _showEditUserNameDialog(context);
                             },
                           ),
                         ],
                       ),
                       const SizedBox(height: 10),
-
-                      // Description
                       Text(
                         _userDescription,
                         style: const TextStyle(
@@ -120,37 +220,30 @@ class _ProfilePageState extends State<ProfilePage> {
                           fontSize: 15,
                         ),
                       ),
-
-                      // Edit user description button with alignment in Row
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.end, // Align icon to the end (right)
+                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           IconButton(
                             icon: const Icon(
-                              Icons.edit, 
-                              color: Colors.grey, 
-                              size: 15, // Set icon size
+                              Icons.edit,
+                              color: Colors.grey,
+                              size: 15,
                             ),
                             onPressed: () {
-                              // Show dialog to edit the description
                               _showEditDescriptionDialog(context);
                             },
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 10),
-
-                      // Posts section
-                      ...List.generate(
-                        30, // Generate 30 posts for demonstration
-                        (index) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Text(
-                            "Post $index",
-                            style: const TextStyle(color: Colors.black),
-                          ),
-                        ),
+                      // Use the PostCard widget to display user posts
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: userPosts.length,
+                        itemBuilder: (context, index) {
+                          return PostCard(post: userPosts[index]);
+                        },
                       ),
                     ],
                   ),
@@ -158,9 +251,8 @@ class _ProfilePageState extends State<ProfilePage> {
               ],
             ),
           ),
-          // Fixed back button that does not scroll
           Positioned(
-            top: 40, // Adjust this based on the device's status bar height
+            top: 40,
             left: 10,
             child: IconButton(
               icon: const Icon(
@@ -169,7 +261,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 size: 32,
               ),
               onPressed: () {
-                Navigator.of(context).pop(); // Go back to previous page
+                Navigator.of(context).pop();
               },
             ),
           ),
@@ -178,102 +270,165 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // Function to show the pop-up page for editing username
   void _showEditUserNameDialog(BuildContext context) {
     final TextEditingController userNameController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Edit User Name'),
-          content: TextField(
-            controller: userNameController,
-            decoration: const InputDecoration(hintText: "Enter new User Name"),
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20.0),
           ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-              },
-              child: const Text('Cancel'),
+          backgroundColor: const Color.fromARGB(255, 255, 255, 255), // 设置整个对话框的背景颜色为白色
+          child: Container(
+            padding: const EdgeInsets.all(20.0),
+            width: MediaQuery.of(context).size.width * 0.8, // 设置固定宽度为屏幕宽度的80%
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Edit User Name',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: userNameController,
+                  style: const TextStyle(color: Colors.black), // 输入文本的颜色
+                  decoration: InputDecoration(
+                    hintText: "Enter new User Name",
+                    hintStyle: const TextStyle(color: Colors.black54), // 提示文本颜色
+                    filled: true,
+                    fillColor: const Color.fromARGB(255, 255, 246, 218), // 淡芒果黄背景色
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20), // 添加一点间距
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Color.fromARGB(255, 255, 206, 57),
+                          fontSize: 20,
+                        ), // 设置文本颜色为芒果黄，字体大小为20
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        updateUserName(userNameController.text);
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text(
+                        'Save',
+                        style: TextStyle(
+                          color: Color.fromARGB(255, 255, 206, 57),
+                          fontSize: 20,
+                        ), // 设置文本颜色为芒果黄，字体大小为20
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            TextButton(
-              onPressed: () {
-                // Update the userName and close the dialog
-                print("New Username saved");
-                updateUserName(userNameController.text);
-                Navigator.of(context).pop(); // Close the dialog
-              },
-              child: const Text('Save'),
-            ),
-          ],
+          ),
         );
       },
     );
   }
 
-  // Function to show the pop-up page for editing description
   void _showEditDescriptionDialog(BuildContext context) {
-    final TextEditingController userDeescriptionController = TextEditingController();
+    final TextEditingController userDescriptionController = TextEditingController(text: _userDescription);
 
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Edit Description'),
-          content: TextField(
-            controller: userDeescriptionController,
-            decoration: const InputDecoration(hintText: "Enter new description"),
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20.0),
           ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-              },
-              child: const Text('Cancel'),
+          backgroundColor: const Color.fromARGB(255, 255, 255, 255), // 设置整个对话框的背景颜色为芒果黄
+          child: Container(
+            padding: const EdgeInsets.all(20.0),
+            width: MediaQuery.of(context).size.width * 0.8, // 设置固定宽度为屏幕宽度的80%
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Edit Description',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: userDescriptionController,
+                  maxLength: 100, // 限制输入的最大字符数
+                  maxLines: 5, // 限制输入框最多显示的行数
+                  minLines: 5, // 限制输入框最少显示的行数
+                  style: const TextStyle(color: Colors.black), // 输入文本的颜色
+                  decoration: InputDecoration(
+                    hintText: "Enter new description",
+                    hintStyle: const TextStyle(color: Colors.black54), // 提示文本颜色
+                    filled: true,
+                    fillColor: const Color.fromARGB(255, 255, 246, 218), // 淡芒果黄背景色
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                      borderSide: BorderSide.none,
+                    ),
+                    counterStyle: const TextStyle(color: Colors.black54), // 计数器文本颜色
+                  ),
+                ),
+                const SizedBox(height: 20), // 添加一点间距
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Color.fromARGB(255, 255, 206, 57),
+                          fontSize: 20,
+                        ), // 设置文本颜色为黑色，字体大小为20
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        updateUserDescription(userDescriptionController.text);
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text(
+                        'Save',
+                        style: TextStyle(
+                          color: Color.fromARGB(255, 255, 206, 57),
+                          fontSize: 20,
+                        ), // 设置文本颜色为黑色，字体大小为20
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            TextButton(
-              onPressed: () {
-                // Save the new description
-                print("New description saved");
-                updateUserDescription(userDeescriptionController.text);
-                Navigator.of(context).pop(); // Close the dialog
-              },
-              child: const Text('Save'),
-            ),
-          ],
+          ),
         );
       },
-    );
-  }
-}
-
-// The full-screen pop-up page
-class AvatarEditPage extends StatelessWidget {
-  const AvatarEditPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Edit Avatar'),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('This is the full-screen page where you can edit your avatar.'),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the pop-up screen
-              },
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -1,3 +1,6 @@
+import 'package:app_vichack/pages/profile_page.dart';
+import 'package:app_vichack/pages/user_setting_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'custom_drawer.dart';  // Import your custom drawer widget
 import 'create_post_bottom_sheet.dart'; // Import your bottom sheet widget
@@ -185,7 +188,7 @@ class PostCard extends StatelessWidget {
 // Home Page
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
-
+  
   @override
   _HomePageState createState() => _HomePageState();
 }
@@ -280,6 +283,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             icon: const Icon(Icons.account_circle, color: Colors.black),
             onPressed: () {
               // Handle user avatar icon press
+              // Navigate to the ProfileSettingPage when the avatar icon is pressed
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const UserSettingPage()),
+              );
             },
           ),
         ],
@@ -330,6 +338,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 icon: const Icon(Icons.home),
                 onPressed: () {
                   // Handle home icon press
+                  print("home button pressed");
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const ProfilePage()),
+                  );
                 },
               ),
             ),
@@ -339,6 +352,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 icon: const Icon(Icons.star),
                 onPressed: () {
                   // Handle star icon press
+                  
                 },
               ),
             ),

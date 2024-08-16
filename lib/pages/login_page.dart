@@ -16,31 +16,34 @@ class _LoginPageState extends State<LoginPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   void _login() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+  final email = _emailController.text.trim();
+  final password = _passwordController.text.trim();
 
-    try {
-      // Sign in the user with Firebase Authentication
-      final UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+  try {
+    // Sign in the user with Firebase Authentication
+    final UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
 
-      final User? user = userCredential.user;
+    UserRepository.saveUserCredential(userCredential);
 
-      if (user != null) {
-        // Redirect to HomePage after successful login
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const HomePage()),
-        );
-      }
-    } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? 'Login failed')),
+    print("User signed in: ${UserRepository.getCurrentUser()?.uid}");
+
+    if (UserRepository.getCurrentUser() != null) {
+      // => HomePage
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomePage()),
       );
     }
+  } on FirebaseAuthException catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(e.message ?? 'Login failed')),
+    );
   }
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -140,6 +143,37 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
+
+class UserRepository {
+  static UserCredential? _userCredential;
+  static User? _currentUser;
+
+  // record user credential
+  static void saveUserCredential(UserCredential credential) {
+    _userCredential = credential;
+    _currentUser = FirebaseAuth.instance.currentUser;
+  }
+
+  // login credential
+  static UserCredential? getUserCredential() {
+    return _userCredential;
+  }
+
+  // get curreny user
+  static User? getCurrentUser() {
+    return _currentUser;
+  }
+
+  // for log out
+  static void clearUserCredential() {
+    _userCredential = null;
+    _currentUser = null;
+  }
+}
+
+
+
+
 // import 'package:flutter/material.dart';
 
 // class LoginPage extends StatefulWidget {
