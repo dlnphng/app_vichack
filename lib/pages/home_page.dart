@@ -1,72 +1,186 @@
 import 'package:flutter/material.dart';
+import 'custom_drawer.dart';  // Import your custom drawer widget
 import 'create_post_bottom_sheet.dart'; // Import your bottom sheet widget
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
+
 
 // Post Model
 class Post {
+  final String id;
   final String userName;
   final String userImage;
+  final String postTitle;
   final String postContent;
+  final String postImageUrl;
+  final String category;
   final int likes;
   final int comments;
+  final bool isFavorite;  // Ensure this is properly initialized
 
   Post({
+    required this.id,
     required this.userName,
     required this.userImage,
+    required this.postTitle,
     required this.postContent,
+    required this.postImageUrl,
+    required this.category,
     required this.likes,
     required this.comments,
+    this.isFavorite = false,  // Provide a default value
   });
+
+  factory Post.fromFirestore(DocumentSnapshot doc) {
+    Map data = doc.data() as Map;
+    return Post(
+      id: doc.id,
+      userName: data['userName'] ?? 'Unknown User',  // Provide a default username if none is found
+      userImage: data['userImage'] ?? 'default_avatar.png',  // Provide a default user image path
+      postTitle: data['title'] ?? 'No Title',
+      postContent: data['content'] ?? '',
+      postImageUrl: data['imageUrl'] ?? 'default_post_image.png',  // Provide a default post image path
+      category: data['category'] ?? 'Club',
+      likes: data['likeNo'] ?? 0,
+      comments: data['cmtNo'] ?? 0,
+      isFavorite: data['isFavorite'] as bool? ?? false,  // Explicitly handle null with a fallback
+    );
+  }
 }
 
-// Post Widget
-class PostWidget extends StatelessWidget {
+class PostCard extends StatelessWidget {
   final Post post;
 
-  // Custom color defined as a constant
-  static const Color postBackgroundColor = Color(0xFFFFEEDD);
-
-  const PostWidget({Key? key, required this.post}) : super(key: key);
+  const PostCard({Key? key, required this.post}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: EdgeInsets.all(8),
-      padding: EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: postBackgroundColor, // Use the custom color
-        borderRadius: BorderRadius.circular(8), // Optional: for rounded corners
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.3),
-            spreadRadius: 2,
-            blurRadius: 4,
-            offset: Offset(0, 3), // Shadow direction
-          ),
-        ],
+    return Card(
+      margin: EdgeInsets.all(16.0),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16.0),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ListTile(
-            leading: CircleAvatar(backgroundImage: NetworkImage(post.userImage)),
-            title: Text(post.userName),
-            subtitle: Text(post.postContent),
-          ),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text('${post.likes} Likes'),
-                Text('${post.comments} Comments'),
+                CircleAvatar(
+                  radius: 24.0,
+                  backgroundImage: NetworkImage(post.userImage),
+                ),
+                SizedBox(width: 12.0),
+                Expanded(
+                  child: Text(
+                    post.userName,
+                    style: TextStyle(
+                      fontSize: 16.0,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Icon(
+                  post.isFavorite ? Icons.star : Icons.star_border,
+                  color: post.isFavorite ? Colors.amber : Colors.grey,
+                ),
               ],
             ),
-          ),
-        ],
+            SizedBox(height: 16.0),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12.0),
+              child: Image.network(
+                post.postImageUrl,
+                height: 200.0,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
+            ),
+            SizedBox(height: 16.0),
+            Text(
+              post.postTitle,
+              style: TextStyle(
+                fontSize: 18.0,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 8.0),
+            Text(
+              post.postContent,
+              style: TextStyle(
+                fontSize: 14.0,
+              ),
+            ),
+            SizedBox(height: 8.0),
+            TextButton(
+              onPressed: () {
+                // Implement "More" functionality here
+              },
+              child: Text("More"),
+            ),
+            Divider(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.comment, color: Colors.grey),
+                    SizedBox(width: 4.0),
+                    Text(post.comments.toString()),
+                  ],
+                ),
+                Row(
+                  children: [
+                    Icon(Icons.favorite, color: Colors.red),
+                    SizedBox(width: 4.0),
+                    Text(post.likes.toString()),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+
+
+// // Post Widget
+// class PostWidget extends StatelessWidget {
+//   final Post post;
+
+//   const PostWidget({Key? key, required this.post}) : super(key: key);
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return Card(
+//       margin: EdgeInsets.all(8),
+//       child: Column(
+//         crossAxisAlignment: CrossAxisAlignment.start,
+//         children: [
+//           ListTile(
+//             leading: CircleAvatar(backgroundImage: NetworkImage(post.userImage)),
+//             title: Text(post.userName),
+//             subtitle: Text(post.postContent),
+//           ),
+//           Padding(
+//             padding: EdgeInsets.symmetric(horizontal: 16),
+//             child: Row(
+//               mainAxisAlignment: MainAxisAlignment.spaceAround,
+//               children: [
+//                 Text('${post.likes} Likes'),
+//                 Text('${post.comments} Comments'),
+//               ],
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
 
 // Home Page
 class HomePage extends StatefulWidget {
@@ -78,21 +192,29 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-
-  List<Post> posts = [
-    Post(userName: 'Iris', userImage: 'path_to_iris_image', postContent: 'Are you Ready to build the next big mobile app? Join our Mobile Development workshop.', likes: 77, comments: 118),
-    Post(userName: 'Rosé', userImage: 'path_to_rose_image', postContent: 'Learn to create stunning UIs, handle logins, and model with Firebase and Realtime Database.', likes: 77, comments: 118),
-    Post(userName: 'Alex', userImage: 'path_to_alex_image', postContent: 'Join our new workshop on Flutter and Dart.', likes: 53, comments: 45),
-    Post(userName: 'Jamie', userImage: 'path_to_jamie_image', postContent: 'Tips and tricks for effective state management in Flutter.', likes: 89, comments: 67),
-    Post(userName: 'Jordan', userImage: 'path_to_jordan_image', postContent: 'Explore new features in the latest Flutter release.', likes: 112, comments: 80),
-    Post(userName: 'Taylor', userImage: 'path_to_taylor_image', postContent: 'Creating responsive designs with Flutter.', likes: 94, comments: 90),
-    // Add more posts here if needed
-  ];
+  List<Post> socialPosts = [];
+  List<Post> clubPosts = [];
+      // Demo posts
+    // List<Post> demoPosts = [
+    //   Post(id: '1', userName: 'Iris', userImage: 'path_to_iris_image', postContent: 'Are you Ready to build the next big mobile app? Join our Mobile Development workshop.', likes: 77, comments: 118),
+    //   Post(id: '2', userName: 'Rosé', userImage: 'path_to_rose_image', postContent: 'Learn to create stunning UIs, handle logins, and model with Firebase and Realtime Database.', likes: 77, comments: 118),
+    // ];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    fetchPosts();
+  }
+
+  void fetchPosts() async {
+    var firestorePosts = await FirebaseFirestore.instance.collection('posts').get();
+    var fetchedPosts = firestorePosts.docs.map((doc) => Post.fromFirestore(doc)).toList();
+    
+    setState(() {
+      socialPosts = fetchedPosts.where((post) => post.category == 'Social').toList();
+      clubPosts = fetchedPosts.where((post) => post.category != 'Social').toList();
+    });
   }
 
   @override
@@ -175,41 +297,22 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           ),
         ),
       ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(
-                color: Colors.black,
-              ),
-              child: Text('Drawer Header'),
-            ),
-            ListTile(
-              title: const Text('Item 1'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: const Text('Item 2'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        ),
-      ),
+      drawer: const CustomDrawer(),
       body: TabBarView(
         controller: _tabController,
         children: [
           ListView.builder(
-            itemCount: posts.length,
+            itemCount: clubPosts.length,
             itemBuilder: (context, index) {
-              return PostWidget(post: posts[index]);
+              return PostCard(post: clubPosts[index]);
             },
           ),
-          Center(child: const Text('Social Page Content')),
+          ListView.builder(
+            itemCount: socialPosts.length,
+            itemBuilder: (context, index) {
+              return PostCard(post: socialPosts[index]);
+            },
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
