@@ -30,7 +30,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       // home: const SignupPage(), 
-      home: ProfilePage(), //first page to be home page rn instead of login
+      home: HomePage(), //first page to be home page rn instead of login
     );
   }
 }
