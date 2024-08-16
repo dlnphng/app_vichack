@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'savedpost_page.dart';
+import 'login_page.dart';
 import 'custom_drawer.dart';  // Import your custom drawer widget
 import 'create_post_bottom_sheet.dart'; // Import your bottom sheet widget
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:provider/provider.dart';
 
 
 // Post Model
 class Post {
   final String id;
+  final String userId;  // Include user ID
   final String userName;
   final String userImage;
   final String postTitle;
@@ -16,10 +20,10 @@ class Post {
   final String category;
   final int likes;
   final int comments;
-  final bool isFavorite;  // Ensure this is properly initialized
 
   Post({
     required this.id,
+    required this.userId,
     required this.userName,
     required this.userImage,
     required this.postTitle,
@@ -28,22 +32,21 @@ class Post {
     required this.category,
     required this.likes,
     required this.comments,
-    this.isFavorite = false,  // Provide a default value
   });
 
   factory Post.fromFirestore(DocumentSnapshot doc) {
     Map data = doc.data() as Map;
     return Post(
       id: doc.id,
-      userName: data['userName'] ?? 'Unknown User',  // Provide a default username if none is found
-      userImage: data['userImage'] ?? 'default_avatar.png',  // Provide a default user image path
+      userId: data['userId'] ?? '',
+      userName: data['userName'] ?? 'Unknown User',
+      userImage: data['userImage'] ?? 'default_avatar.png',
       postTitle: data['title'] ?? 'No Title',
       postContent: data['content'] ?? '',
-      postImageUrl: data['imageUrl'] ?? 'default_post_image.png',  // Provide a default post image path
-      category: data['category'] ?? 'Club',
+      postImageUrl: data['imageUrl'] ?? 'default_post_image.png',
+      category: data['category'] ?? 'General',
       likes: data['likeNo'] ?? 0,
       comments: data['cmtNo'] ?? 0,
-      isFavorite: data['isFavorite'] as bool? ?? false,  // Explicitly handle null with a fallback
     );
   }
 }
@@ -83,8 +86,9 @@ class PostCard extends StatelessWidget {
                   ),
                 ),
                 Icon(
-                  post.isFavorite ? Icons.star : Icons.star_border,
-                  color: post.isFavorite ? Colors.amber : Colors.grey,
+                  Icons.star
+                  // post.isFavorite ? Icons.star : Icons.star_border,
+                  // color: post.isFavorite ? Colors.amber : Colors.grey,
                 ),
               ],
             ),
@@ -147,41 +151,6 @@ class PostCard extends StatelessWidget {
   }
 }
 
-
-// // Post Widget
-// class PostWidget extends StatelessWidget {
-//   final Post post;
-
-//   const PostWidget({Key? key, required this.post}) : super(key: key);
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Card(
-//       margin: EdgeInsets.all(8),
-//       child: Column(
-//         crossAxisAlignment: CrossAxisAlignment.start,
-//         children: [
-//           ListTile(
-//             leading: CircleAvatar(backgroundImage: NetworkImage(post.userImage)),
-//             title: Text(post.userName),
-//             subtitle: Text(post.postContent),
-//           ),
-//           Padding(
-//             padding: EdgeInsets.symmetric(horizontal: 16),
-//             child: Row(
-//               mainAxisAlignment: MainAxisAlignment.spaceAround,
-//               children: [
-//                 Text('${post.likes} Likes'),
-//                 Text('${post.comments} Comments'),
-//               ],
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
-
 // Home Page
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -194,32 +163,62 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   late TabController _tabController;
   List<Post> socialPosts = [];
   List<Post> clubPosts = [];
-      // Demo posts
-    // List<Post> demoPosts = [
-    //   Post(id: '1', userName: 'Iris', userImage: 'path_to_iris_image', postContent: 'Are you Ready to build the next big mobile app? Join our Mobile Development workshop.', likes: 77, comments: 118),
-    //   Post(id: '2', userName: 'Rosé', userImage: 'path_to_rose_image', postContent: 'Learn to create stunning UIs, handle logins, and model with Firebase and Realtime Database.', likes: 77, comments: 118),
-    // ];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    fetchPosts();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = Provider.of<UserProvider>(context, listen: false).user;
+      if (user != null) {
+        fetchPosts();  // Make sure to call this to load posts
+      }
+    });
   }
 
-  void fetchPosts() async {
+
+void fetchPosts() async {
+  try {
     var firestorePosts = await FirebaseFirestore.instance.collection('posts').get();
-    var fetchedPosts = firestorePosts.docs.map((doc) => Post.fromFirestore(doc)).toList();
     
+    List<Post> fetchedPosts = [];
+    for (var doc in firestorePosts.docs) {
+      var initialPost = Post.fromFirestore(doc);
+      
+      // Fetch user data based on userId
+      var userData = await FirebaseFirestore.instance.collection('users').doc(initialPost.userId).get();
+      var userName = userData.data()?['name'] ?? 'Unknown User';  // Using 'name' attribute for username
+
+      // Create a new Post with the updated username
+      var updatedPost = Post(
+        id: initialPost.id,
+        userId: initialPost.userId,
+        userName: userName,
+        userImage: initialPost.userImage,
+        postTitle: initialPost.postTitle,
+        postContent: initialPost.postContent,
+        postImageUrl: initialPost.postImageUrl,
+        category: initialPost.category,
+        likes: initialPost.likes,
+        comments: initialPost.comments,
+      );
+
+      fetchedPosts.add(updatedPost);
+    }
+
     setState(() {
       socialPosts = fetchedPosts.where((post) => post.category == 'Social').toList();
       clubPosts = fetchedPosts.where((post) => post.category != 'Social').toList();
     });
+  } catch (e) {
+    print('Error fetching posts: $e'); // This will help in debugging
   }
+}
+
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _tabController.dispose();  // Properly dispose the controller
     super.dispose();
   }
 

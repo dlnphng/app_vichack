@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'home_page.dart';  // Assuming you have a homepage.dart file with the HomePage widget
 
 class LoginPage extends StatefulWidget {
@@ -15,32 +16,34 @@ class _LoginPageState extends State<LoginPage> {
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  void _login() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+void _login() async {
+  final email = _emailController.text.trim();
+  final password = _passwordController.text.trim();
 
-    try {
-      // Sign in the user with Firebase Authentication
-      final UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+  try {
+    final UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
 
-      final User? user = userCredential.user;
+    final User? user = userCredential.user;
 
-      if (user != null) {
-        // Redirect to HomePage after successful login
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const HomePage()),
-        );
-      }
-    } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? 'Login failed')),
+    if (user != null) {
+      // Set user in provider
+      Provider.of<UserProvider>(context, listen: false).setUser(UserModel.fromFirebaseUser(user));
+
+      // Redirect to HomePage after successful login
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomePage()),
       );
     }
+  } on FirebaseAuthException catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(e.message ?? 'Login failed')),
+    );
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -140,6 +143,32 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
+
+class UserModel {
+  final String id;
+  final String email;
+
+  UserModel({required this.id, required this.email});
+
+  factory UserModel.fromFirebaseUser(User user) {
+    return UserModel(
+      id: user.uid,
+      email: user.email ?? '',
+    );
+  }
+}
+
+class UserProvider with ChangeNotifier {
+  UserModel? _user;
+
+  UserModel? get user => _user;
+
+  void setUser(UserModel user) {
+    _user = user;
+    notifyListeners();
+  }
+}
+
 // import 'package:flutter/material.dart';
 
 // class LoginPage extends StatefulWidget {

@@ -4,6 +4,8 @@ import 'package:app_vichack/pages/profile_page.dart';
 import 'package:flutter/material.dart';
 import 'pages/home_page.dart';
 import 'pages/post_popup_page.dart';
+import 'package:provider/provider.dart';
+
 
 //Firebase initialization
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,16 +13,20 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
 void main() async {
-	// 1. Need this so we can initialise Firebase in the main function
-  WidgetsFlutterBinding.ensureInitialized(); 
-  
-  // 2. Intialise Firebase
+  WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
-	  options: DefaultFirebaseOptions.currentPlatform // Only incluce this if you have the firebase_options.dart file
+    options: DefaultFirebaseOptions.currentPlatform
   );
-  
-  runApp(const MyApp());
+
+  runApp(
+    ChangeNotifierProvider(
+      create: (context) => UserProvider(),
+      child: const MyApp(),
+    ),
+  );
 }
+
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
