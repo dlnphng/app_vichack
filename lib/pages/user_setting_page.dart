@@ -22,19 +22,29 @@ class _UserSettingPageState extends State<UserSettingPage> {
   }
 
   void _loadUserData() async {
-    User? user = FirebaseAuth.instance.currentUser;
+  User? user = FirebaseAuth.instance.currentUser;
 
-    if (user != null) {
-      DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+  if (user != null) {
+    DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
 
-      if (userDoc.exists) {
-        setState(() {
-          _userName = userDoc.get('name') ?? 'User Name';
-          _avatarUrl = userDoc.get('avatarUrl');
-        });
-      }
+    if (userDoc.exists) {
+      final data = userDoc.data() as Map<String, dynamic>?;  // Cast data to Map<String, dynamic>
+      print("User data: $data");  // Debug output
+
+      setState(() {
+        _userName = data?['name'] ?? 'User Name';
+        _avatarUrl = data?['avatarUrl'];
+      });
+
+      print("Loaded userName: $_userName, avatarUrl: $_avatarUrl");  // Debug output
+    } else {
+      print("User document does not exist.");
     }
+  } else {
+    print("No authenticated user found.");
   }
+}
+
 
 
   void _logout(BuildContext context) async {
