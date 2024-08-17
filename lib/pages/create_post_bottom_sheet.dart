@@ -2,9 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart';
 import 'login_page.dart';
+import 'home_page.dart';
 import 'dart:math'; // For max function
 
 class CreatePostBottomSheet extends StatefulWidget {
@@ -19,6 +19,10 @@ class _CreatePostBottomSheetState extends State<CreatePostBottomSheet> {
   List<XFile> _images = [];
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
+
+  String? _selectedCategory;
+  List<String> _selectedEventTypes = []; // For multiple event types
+  final List<String> _clubTypes = ['IT', 'Law', 'Business', 'Engineering'];
 
   Future<void> _pickImage() async {
     final List<XFile>? pickedFiles = await _picker.pickMultiImage();
@@ -63,6 +67,7 @@ class _CreatePostBottomSheetState extends State<CreatePostBottomSheet> {
         'title': _titleController.text,
         'content': _contentController.text,
         'category': _selectedCategory,
+        'eventTypes': _selectedEventTypes,
         'timestamp': FieldValue.serverTimestamp(),
         'likeNo': 0,
         'cmtNo': 0,
@@ -75,8 +80,6 @@ class _CreatePostBottomSheetState extends State<CreatePostBottomSheet> {
       print("Error during post submission: $e");
     }
   }
-
-
 
   Widget _buildImageList() {
     return SingleChildScrollView(
@@ -99,36 +102,63 @@ class _CreatePostBottomSheetState extends State<CreatePostBottomSheet> {
     );
   }
 
-  String? _selectedCategory;
-
   Widget _buildCategoryPicker() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    return Column(
       children: [
-        ElevatedButton(
-          onPressed: () => setState(() => _selectedCategory = 'Social'),
-          child: Text('Social', style: TextStyle(color: _selectedCategory == 'Social' ? Colors.white : Colors.black)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _selectedCategory == 'Social' ? Colors.blue : Colors.grey[300],  // Updated from 'primary'
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            ElevatedButton(
+              onPressed: () => setState(() => _selectedCategory = 'Social'),
+              child: Text('Social', style: TextStyle(color: _selectedCategory == 'Social' ? Colors.white : Colors.black)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _selectedCategory == 'Social' ? Colors.blue : Colors.grey[300],
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => setState(() => _selectedCategory = 'Club'),
+              child: Text('Club', style: TextStyle(color: _selectedCategory == 'Club' ? Colors.white : Colors.black)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _selectedCategory == 'Club' ? Colors.blue : Colors.grey[300],
+              ),
+            ),
+          ],
         ),
-        ElevatedButton(
-          onPressed: () => setState(() => _selectedCategory = 'Club'),
-          child: Text('Club', style: TextStyle(color: _selectedCategory == 'Club' ? Colors.white : Colors.black)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _selectedCategory == 'Club' ? Colors.blue : Colors.grey[300],
+        if (_selectedCategory == 'Club')
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: _buildEventTypesPicker(),
           ),
-        ),
       ],
     );
   }
 
+  Widget _buildEventTypesPicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: _clubTypes.map((type) {
+        return CheckboxListTile(
+          title: Text(type),
+          value: _selectedEventTypes.contains(type),
+          onChanged: (bool? value) {
+            setState(() {
+              if (value == true) {
+                _selectedEventTypes.add(type);
+              } else {
+                _selectedEventTypes.remove(type);
+              }
+            });
+          },
+        );
+      }).toList(),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
-      height: max(MediaQuery.of(context).size.height * 0.75, 500),
+      height: max(MediaQuery.of(context).size.height * 0.85, 550), // Increased height
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,29 +213,11 @@ class _CreatePostBottomSheetState extends State<CreatePostBottomSheet> {
     );
   }
 
-
   @override
   void dispose() {
     _titleController.dispose();
     _contentController.dispose();
     super.dispose();
   }
-
-  void createPost(String title, String content, String imageUrl, String category) async {
-    var currentUser = Provider.of<UserProvider>(context, listen: false).user;
-    if (currentUser != null) {
-      FirebaseFirestore.instance.collection('posts').add({
-        'userId': currentUser.id,  // Include the user's ID
-        'title': title,
-        'content': content,
-        'imageUrl': imageUrl,
-        'category': category,
-        'likeNo': 0,
-        'cmtNo': 0,
-        'userImage': 'default_avatar.png' // or fetch this from the user profile if available
-      });
-    }
-  }
-
-
 }
+

@@ -11,7 +11,7 @@ import 'package:provider/provider.dart';
 // Post Model
 class Post {
   final String id;
-  final String userId;  // Include user ID
+  final String userId;
   final String userName;
   final String userImage;
   final String postTitle;
@@ -20,6 +20,7 @@ class Post {
   final String category;
   final int likes;
   final int comments;
+  final List<String> eventTypes;  // Add this line
 
   Post({
     required this.id,
@@ -32,6 +33,7 @@ class Post {
     required this.category,
     required this.likes,
     required this.comments,
+    required this.eventTypes,  // Add this line
   });
 
   factory Post.fromFirestore(DocumentSnapshot doc) {
@@ -47,6 +49,7 @@ class Post {
       category: data['category'] ?? 'General',
       likes: data['likeNo'] ?? 0,
       comments: data['cmtNo'] ?? 0,
+      eventTypes: List<String>.from(data['eventTypes'] ?? []),  // Parse the list
     );
   }
 }
@@ -161,64 +164,89 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  List<Post> socialPosts = [];
-  List<Post> clubPosts = [];
+  List<Post> allPosts = []; // Holds all fetched posts
+  List<Post> displayedPosts = []; // Posts to display based on filter
+
+  int _currentPage = 0; 
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final user = Provider.of<UserProvider>(context, listen: false).user;
-      if (user != null) {
-        fetchPosts();  // Make sure to call this to load posts
+    _tabController.addListener(_handleTabSelection);
+    fetchPosts();
+    // Listen to filter changes
+    Provider.of<PostFilterProvider>(context, listen: false).addListener(_applyFilter);
+  }
+
+    void _applyFilter() {
+    String? filterType = Provider.of<PostFilterProvider>(context, listen: false).filterType;
+    if (_tabController.index == 0 && filterType != null) { // Only apply filter to "Club" posts
+      setState(() {
+        displayedPosts = allPosts.where((post) =>
+          post.category == "Club" && post.eventTypes.contains(filterType)).toList();
+      });
+    } else {
+      // Reset or apply different filters based on tab
+      setState(() {
+        displayedPosts = allPosts.where((post) => post.category == (_tabController.index == 0 ? "Club" : "Social")).toList();
+      });
+    }
+  }
+
+  void _handleTabSelection() {
+    if (_tabController.indexIsChanging) {
+      applyFilter(_tabController.index == 0 ? "Club" : "Social");
+    }
+  }
+
+  void applyFilter(String? filterType) {
+    setState(() {
+      if (filterType == null) {
+        displayedPosts = allPosts; // No filter, show all posts
+      } else {
+        displayedPosts = allPosts.where((post) => post.category == filterType).toList();
       }
     });
   }
 
-
-void fetchPosts() async {
-  try {
-    var firestorePosts = await FirebaseFirestore.instance.collection('posts').get();
-    
-    List<Post> fetchedPosts = [];
-    for (var doc in firestorePosts.docs) {
-      var initialPost = Post.fromFirestore(doc);
-      
-      // Fetch user data based on userId
-      var userData = await FirebaseFirestore.instance.collection('users').doc(initialPost.userId).get();
-      var userName = userData.data()?['name'] ?? 'Unknown User';  // Using 'name' attribute for username
-
-      // Create a new Post with the updated username
-      var updatedPost = Post(
-        id: initialPost.id,
-        userId: initialPost.userId,
-        userName: userName,
-        userImage: initialPost.userImage,
-        postTitle: initialPost.postTitle,
-        postContent: initialPost.postContent,
-        postImageUrl: initialPost.postImageUrl,
-        category: initialPost.category,
-        likes: initialPost.likes,
-        comments: initialPost.comments,
-      );
-
-      fetchedPosts.add(updatedPost);
-    }
-
+  void _navigateToSocial() {
     setState(() {
-      socialPosts = fetchedPosts.where((post) => post.category == 'Social').toList();
-      clubPosts = fetchedPosts.where((post) => post.category != 'Social').toList();
+      _currentPage = 1; // Set to 1 for your new page
     });
-  } catch (e) {
-    print('Error fetching posts: $e'); // This will help in debugging
   }
-}
+
+  // void fetchPosts() async {
+  //   try {
+  //     var firestorePosts = await FirebaseFirestore.instance.collection('posts').get();
+  //     List<Post> fetchedPosts = firestorePosts.docs.map((doc) => Post.fromFirestore(doc)).toList();
+  //     setState(() {
+  //       allPosts = fetchedPosts;
+  //       applyFilter(_tabController.index == 0 ? "Club" : "Social"); // Apply filter based on the current tab
+  //     });
+  //   } catch (e) {
+  //     print('Error fetching posts: $e');
+  //   }
+  // }
+
+  void fetchPosts() async {
+    try {
+      var firestorePosts = await FirebaseFirestore.instance.collection('posts').get();
+      setState(() {
+        allPosts = firestorePosts.docs.map((doc) => Post.fromFirestore(doc)).toList();
+        applyFilter(_tabController.index == 0 ? "Club" : "Social"); // Apply initial filter based on the current tab
+      });
+    } catch (e) {
+      print('Error fetching posts: $e');
+    }
+  }
 
 
   @override
   void dispose() {
-    _tabController.dispose();  // Properly dispose the controller
+    _tabController.removeListener(_handleTabSelection);
+    _tabController.dispose();
+    Provider.of<PostFilterProvider>(context, listen: false).removeListener(_applyFilter);
     super.dispose();
   }
 
@@ -229,10 +257,6 @@ void fetchPosts() async {
         return const CreatePostBottomSheet(); // Use the separate widget here
       },
     );
-  }
-
-  void _navigateToSocial(BuildContext context) {
-    // Implement navigation to the Social page
   }
 
   @override
@@ -300,16 +324,18 @@ void fetchPosts() async {
       body: TabBarView(
         controller: _tabController,
         children: [
+          // Display the filtered list of posts for "Club"
           ListView.builder(
-            itemCount: clubPosts.length,
+            itemCount: displayedPosts.length,
             itemBuilder: (context, index) {
-              return PostCard(post: clubPosts[index]);
+              return PostCard(post: displayedPosts[index]);
             },
           ),
+          // Display the filtered list of posts for "Social"
           ListView.builder(
-            itemCount: socialPosts.length,
+            itemCount: displayedPosts.length,
             itemBuilder: (context, index) {
-              return PostCard(post: socialPosts[index]);
+              return PostCard(post: displayedPosts[index]);
             },
           ),
         ],
@@ -338,6 +364,9 @@ void fetchPosts() async {
                 icon: const Icon(Icons.star),
                 onPressed: () {
                   // Handle star icon press
+                  Navigator.push(context,
+                    MaterialPageRoute(builder: (context) => YourNewPage()),
+                  );
                 },
               ),
             ),

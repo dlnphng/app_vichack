@@ -6,6 +6,8 @@ import 'pages/home_page.dart';
 import 'pages/post_popup_page.dart';
 import 'package:provider/provider.dart';
 
+// Import PostFilterProvider if it's in a separate file
+import 'pages/custom_drawer.dart';
 
 //Firebase initialization
 import 'package:firebase_auth/firebase_auth.dart';
@@ -19,25 +21,24 @@ void main() async {
   );
 
   runApp(
-    ChangeNotifierProvider(
-      create: (context) => UserProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => UserProvider()),
+        ChangeNotifierProvider(create: (context) => PostFilterProvider()),
+      ],
       child: const MyApp(),
     ),
   );
 }
 
-
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      // home: const SignupPage(), 
-      home: SignupPage(), //first page to be home page rn instead of login
+      home: SignupPage(), // Set this as per your flow, or use a condition to navigate
     );
   }
 }
-
