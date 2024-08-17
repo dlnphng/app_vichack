@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_page.dart';
-import 'home_page.dart';
 
 class UserSettingPage extends StatefulWidget {
   const UserSettingPage({Key? key}) : super(key: key);
@@ -14,6 +13,9 @@ class UserSettingPage extends StatefulWidget {
 class _UserSettingPageState extends State<UserSettingPage> {
   String? _userName;
   String? _avatarUrl;
+  String? _university;
+  String? _email;
+  final TextEditingController _universityController = TextEditingController();
 
   @override
   void initState() {
@@ -22,44 +24,50 @@ class _UserSettingPageState extends State<UserSettingPage> {
   }
 
   void _loadUserData() async {
-  User? user = FirebaseAuth.instance.currentUser;
+    User? user = FirebaseAuth.instance.currentUser;
 
-  if (user != null) {
-    DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    if (user != null) {
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
 
-    if (userDoc.exists) {
-      final data = userDoc.data() as Map<String, dynamic>?;  // Cast data to Map<String, dynamic>
-      print("User data: $data");  // Debug output
-
-      setState(() {
-        _userName = data?['name'] ?? 'User Name';
-        _avatarUrl = data?['avatarUrl'];
-      });
-
-      print("Loaded userName: $_userName, avatarUrl: $_avatarUrl");  // Debug output
+      if (userDoc.exists) {
+        final data = userDoc.data() as Map<String, dynamic>?;
+        setState(() {
+          _userName = data?['name'] ?? 'User Name';
+          _avatarUrl = data?['avatarUrl'];
+          _university = data?['university'] ?? 'Not Provided';
+          _email = user.email;
+          _universityController.text = _university ?? '';
+        });
+      } else {
+        print("User document does not exist.");
+      }
     } else {
-      print("User document does not exist.");
+      print("No authenticated user found.");
     }
-  } else {
-    print("No authenticated user found.");
   }
-}
-
-
 
   void _logout(BuildContext context) async {
-    // Sign out from Firebase
     await FirebaseAuth.instance.signOut();
-
-    // Clear the stored user credentials
-    UserRepository.clearUserCredential();
-
-    // After signing out, redirect to the login page
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => const LoginPage()),
-      (Route<dynamic> route) => false, // Removes all the previous routes
+      (Route<dynamic> route) => false,
     );
+  }
+
+  void _updateUniversity() async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+        'university': _universityController.text,
+      });
+      setState(() {
+        _university = _universityController.text;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("University updated successfully!")),
+      );
+    }
   }
 
   @override
@@ -67,7 +75,7 @@ class _UserSettingPageState extends State<UserSettingPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('User Settings'),
-        backgroundColor: const Color.fromARGB(255, 255, 193, 86), // Customize the color if needed
+        backgroundColor: const Color.fromARGB(255, 255, 193, 86),
       ),
       body: SingleChildScrollView(
         child: Container(
@@ -79,23 +87,19 @@ class _UserSettingPageState extends State<UserSettingPage> {
               const SizedBox(height: 20),
               Column(
                 children: [
-                  // Display the user avatar
                   CircleAvatar(
                     radius: 60,
-                    backgroundImage: _avatarUrl != null 
-                        ? NetworkImage(_avatarUrl!) 
-                        : null,  // If _avatarUrl is not null, display the image
-                    backgroundColor: Color.fromARGB(255, 252, 186, 85),
-                    child: _avatarUrl == null 
+                    backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
+                    backgroundColor: const Color.fromARGB(255, 252, 186, 85),
+                    child: _avatarUrl == null
                         ? const Icon(
-                            Icons.account_circle, 
-                            size: 120, 
+                            Icons.account_circle,
+                            size: 120,
                             color: Colors.white,
-                          ) 
-                        : null,  // If _avatarUrl is null, display a default icon
+                          )
+                        : null,
                   ),
                   const SizedBox(height: 20),
-                  // Display the user name
                   Text(
                     _userName ?? 'User Name',
                     style: const TextStyle(
@@ -103,17 +107,50 @@ class _UserSettingPageState extends State<UserSettingPage> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _email ?? 'Email Not Available',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: _universityController,
+                    decoration: const InputDecoration(
+                      labelText: 'University',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: _updateUniversity,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color.fromARGB(255, 255, 193, 86),
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text(
+                      'Update University',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
                 ],
               ),
               const Spacer(),
-              // Logout button at the bottom, full width
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => _logout(context),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color.fromARGB(255, 255, 193, 86), // Customize the button color
-                    padding: const EdgeInsets.symmetric(vertical: 15), // Adjust the padding for height
+                    backgroundColor: const Color.fromARGB(255, 255, 193, 86),
+                    padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
