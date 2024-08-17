@@ -156,6 +156,10 @@ class UserModel {
       email: user.email ?? '',
     );
   }
+
+  get name => null;
+
+  get userImage => null;
 }
 
 class UserProvider with ChangeNotifier {

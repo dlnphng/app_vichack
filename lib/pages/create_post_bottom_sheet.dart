@@ -5,8 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart';
 import 'login_page.dart';
-import 'home_page.dart';
-import 'dart:math'; // For max function
+import 'dart:math';
 
 class CreatePostBottomSheet extends StatefulWidget {
   const CreatePostBottomSheet({Key? key}) : super(key: key);
@@ -20,9 +19,10 @@ class _CreatePostBottomSheetState extends State<CreatePostBottomSheet> {
   List<XFile> _images = [];
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
+  bool isLoading = false;
 
   String? _selectedCategory;
-  List<String> _selectedEventTypes = []; // For multiple event types
+  List<String> _selectedEventTypes = [];
   final List<String> _clubTypes = ['IT', 'Law', 'Business', 'Engineering'];
 
   Future<void> _pickImage() async {
@@ -44,50 +44,71 @@ class _CreatePostBottomSheetState extends State<CreatePostBottomSheet> {
     });
   }
 
-void _submitPost() async {
-  if (_titleController.text.isEmpty || _contentController.text.isEmpty || _selectedCategory == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Please fill in all fields and select a category.")));
-    return;
-  }
-
-  var currentUser = Provider.of<UserProvider>(context, listen: false).user;
-  if (currentUser == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("No user logged in")));
-    return;
-  }
-
-  try {
-    List<String> imageUrls = [];
-    for (var image in _images) {
-      // Upload each image and store the download URLs
-      var fileRef = FirebaseStorage.instance.ref('post_images/${image.name}');
-      await fileRef.putFile(File(image.path));
-      String downloadUrl = await fileRef.getDownloadURL();
-      imageUrls.add(downloadUrl);
+  Future<void> _submitPost() async {
+    if (_titleController.text.isEmpty || _contentController.text.isEmpty || _selectedCategory == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please fill in all fields and select a category.")),
+      );
+      return;
     }
 
-    CollectionReference posts = FirebaseFirestore.instance.collection('posts');
-    await posts.add({
-      'userId': currentUser.id,
-      'title': _titleController.text,
-      'content': _contentController.text,
-      'category': _selectedCategory,
-      'eventTypes': _selectedEventTypes,
-      'timestamp': FieldValue.serverTimestamp(),
-      'likeNo': 0,
-      'cmtNo': 0,
-      'imageUrls': imageUrls,  // Store image URLs in an array
+    var currentUser = Provider.of<UserProvider>(context, listen: false).user;
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No user logged in")),
+      );
+      return;
+    }
+
+    if (_selectedCategory == 'Club' && _selectedEventTypes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select at least one event type for Club category.")),
+      );
+      return;
+    }
+
+    setState(() {
+      isLoading = true;
     });
 
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Post uploaded successfully!")));
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to upload post: ${e.toString()}")));
-    print("Error during post submission: $e");
+    try {
+      List<String> imageUrls = [];
+      for (var image in _images) {
+        var fileRef = FirebaseStorage.instance.ref('post_images/${image.name}');
+        await fileRef.putFile(File(image.path));
+        String downloadUrl = await fileRef.getDownloadURL();
+        imageUrls.add(downloadUrl);
+      }
+
+      CollectionReference posts = FirebaseFirestore.instance.collection('posts');
+      await posts.add({
+        'userId': currentUser.id,
+        'title': _titleController.text,
+        'content': _contentController.text,
+        'category': _selectedCategory,
+        'eventTypes': _selectedEventTypes,
+        'timestamp': FieldValue.serverTimestamp(),
+        'likeNo': 0,
+        'cmtNo': 0,
+        'imageUrls': imageUrls,
+        'commentList': []
+      });
+
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Post uploaded successfully!")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to upload post: ${e.toString()}")),
+      );
+      print("Error during post submission: $e");
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
+    }
   }
-}
 
   Widget _buildImageList() {
     return SingleChildScrollView(
@@ -118,14 +139,20 @@ void _submitPost() async {
           children: [
             ElevatedButton(
               onPressed: () => setState(() => _selectedCategory = 'Social'),
-              child: Text('Social', style: TextStyle(color: _selectedCategory == 'Social' ? Colors.white : Colors.black)),
+              child: Text(
+                'Social',
+                style: TextStyle(color: _selectedCategory == 'Social' ? Colors.white : Colors.black),
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _selectedCategory == 'Social' ? Colors.blue : Colors.grey[300],
               ),
             ),
             ElevatedButton(
               onPressed: () => setState(() => _selectedCategory = 'Club'),
-              child: Text('Club', style: TextStyle(color: _selectedCategory == 'Club' ? Colors.white : Colors.black)),
+              child: Text(
+                'Club',
+                style: TextStyle(color: _selectedCategory == 'Club' ? Colors.white : Colors.black),
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _selectedCategory == 'Club' ? Colors.blue : Colors.grey[300],
               ),
@@ -166,7 +193,7 @@ void _submitPost() async {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
-      height: max(MediaQuery.of(context).size.height * 0.85, 550), // Increased height
+      height: max(MediaQuery.of(context).size.height * 0.85, 550),
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,7 +236,11 @@ void _submitPost() async {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _submitPost,
-              child: const Text('Upload'),
+              child: isLoading
+                  ? CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    )
+                  : const Text('Upload'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
@@ -228,4 +259,3 @@ void _submitPost() async {
     super.dispose();
   }
 }
-

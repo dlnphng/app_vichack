@@ -3,10 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'custom_drawer.dart';
 import 'create_post_bottom_sheet.dart';
-import 'savedpost_page.dart';  // Import your saved posts page
-import 'login_page.dart';  // Assuming the UserProvider and UserModel are defined in login_page.dart
+import 'savedpost_page.dart';
+import 'login_page.dart';
+import 'comment.dart';
 
-// Post Model
 class Post {
   final String id;
   final String userId;
@@ -19,6 +19,7 @@ class Post {
   final int likes;
   final int comments;
   final List<String> eventTypes;
+  final List<Comment> commentList;
 
   Post({
     required this.id,
@@ -32,6 +33,7 @@ class Post {
     required this.likes,
     required this.comments,
     required this.eventTypes,
+    required this.commentList,
   });
 
   factory Post.fromFirestoreWithUser(DocumentSnapshot postDoc, Map<String, dynamic> userData) {
@@ -48,11 +50,11 @@ class Post {
       likes: int.parse(postData['likeNo']?.toString() ?? '0'),
       comments: int.parse(postData['cmtNo']?.toString() ?? '0'),
       eventTypes: List<String>.from(postData['eventTypes'] ?? []),
+      commentList: List<Comment>.from(postData['commentsList']?.map((commentData) => Comment.fromMap(commentData)) ?? []),
     );
   }
 }
 
-// PostCard Widget
 class PostCard extends StatefulWidget {
   final Post post;
 
@@ -71,7 +73,6 @@ class _PostCardState extends State<PostCard> {
     checkIfSaved();
   }
 
-  // Check if the post is already saved when the widget is initialized
   void checkIfSaved() async {
     final userId = Provider.of<UserProvider>(context, listen: false).user?.id;
     if (userId == null) return;
@@ -79,13 +80,11 @@ class _PostCardState extends State<PostCard> {
     final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
     final savedPostIds = List<String>.from(userDoc['savedPosts'] ?? []);
 
-    // Update the state based on whether the post is saved or not
     setState(() {
       isSaved = savedPostIds.contains(widget.post.id);
     });
   }
 
-  // Toggle the save state of the post
   Future<void> toggleSavePost() async {
     final userId = Provider.of<UserProvider>(context, listen: false).user?.id;
     if (userId == null) return;
@@ -105,17 +104,26 @@ class _PostCardState extends State<PostCard> {
           'savedPosts': FieldValue.arrayRemove([widget.post.id])
         });
         setState(() {
-          isSaved = false;  // Update state to reflect the post is unsaved
+          isSaved = false;
         });
       } else {
         transaction.update(userDocRef, {
           'savedPosts': FieldValue.arrayUnion([widget.post.id])
         });
         setState(() {
-          isSaved = true;  // Update state to reflect the post is saved
+          isSaved = true;
         });
       }
     });
+  }
+
+  void _navigateToComments() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CommentScreen(post: widget.post),
+      ),
+    );
   }
 
   @override
@@ -147,7 +155,6 @@ class _PostCardState extends State<PostCard> {
                     ),
                   ),
                 ),
-                // IconButton to toggle save state
                 IconButton(
                   icon: Icon(
                     isSaved ? Icons.star : Icons.star_border,
@@ -178,12 +185,15 @@ class _PostCardState extends State<PostCard> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.comment, color: Colors.grey),
-                    SizedBox(width: 4.0),
-                    Text(widget.post.comments.toString()),
-                  ],
+                GestureDetector(
+                  onTap: _navigateToComments,
+                  child: Row(
+                    children: [
+                      Icon(Icons.comment, color: Colors.grey),
+                      SizedBox(width: 4.0),
+                      Text(widget.post.comments.toString()),
+                    ],
+                  ),
                 ),
                 Row(
                   children: [
@@ -281,17 +291,18 @@ class _PostCardState extends State<PostCard> {
                 ),
               ],
             ),
-            if (imageCount > 3) Container(
-              width: 165,
-              height: 150,
-              color: Colors.black45,
-              child: Center(
-                child: Text(
-                  '+${imageCount - 3}',
-                  style: TextStyle(color: Colors.white, fontSize: 24),
+            if (imageCount > 3)
+              Container(
+                width: 165,
+                height: 150,
+                color: Colors.black45,
+                child: Center(
+                  child: Text(
+                    '+${imageCount - 3}',
+                    style: TextStyle(color: Colors.white, fontSize: 24),
+                  ),
                 ),
               ),
-            ),
           ],
         );
     }
@@ -318,7 +329,6 @@ class _PostCardState extends State<PostCard> {
   }
 }
 
-// Home Page
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -330,8 +340,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   late TabController _tabController;
   List<Post> allPosts = [];
   List<Post> displayedPosts = [];
-
-  int _currentPage = 0;
+  bool isLoading = false;
 
   @override
   void initState() {
@@ -365,6 +374,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
 
   void fetchPosts() async {
+    setState(() {
+      isLoading = true;
+    });
     try {
       var firestorePosts = await FirebaseFirestore.instance.collection('posts').get();
       List<Post> fetchedPosts = [];
@@ -385,6 +397,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       });
     } catch (e) {
       print('Error fetching posts: $e');
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
     }
   }
 
@@ -462,21 +478,29 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         ),
       ),
       drawer: const CustomDrawer(),
-      body: TabBarView(
-        controller: _tabController,
+      body: Stack(
         children: [
-          ListView.builder(
-            itemCount: displayedPosts.length,
-            itemBuilder: (context, index) {
-              return PostCard(post: displayedPosts[index]);
-            },
+          TabBarView(
+            controller: _tabController,
+            children: [
+              ListView.builder(
+                itemCount: displayedPosts.length,
+                itemBuilder: (context, index) {
+                  return PostCard(post: displayedPosts[index]);
+                },
+              ),
+              ListView.builder(
+                itemCount: displayedPosts.length,
+                itemBuilder: (context, index) {
+                  return PostCard(post: displayedPosts[index]);
+                },
+              ),
+            ],
           ),
-          ListView.builder(
-            itemCount: displayedPosts.length,
-            itemBuilder: (context, index) {
-              return PostCard(post: displayedPosts[index]);
-            },
-          ),
+          if (isLoading)
+            Center(
+              child: CircularProgressIndicator(),
+            ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
