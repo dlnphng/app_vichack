@@ -1,8 +1,12 @@
+import 'dart:io';
+import 'package:app_vichack/pages/home_page.dart';
 import 'package:app_vichack/pages/login_page.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
-import 'home_page.dart'; // Import to use Post and PostCard
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -12,18 +16,25 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  String _userName = "Loading..."; // Initial user name
+  String _userName = "Loading...";
   String _userDescription = "Mystery person...";
+  String? _avatarUrl; // URL of the avatar image
+  String? _backgroundUrl; // URL of the background image
+  File? _selectedImage; // File to store the selected image before cropping
+  File? _selectedBackgroundImage; // File to store the selected background image before cropping
   List<Post> userPosts = [];
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
+
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
-    fetchUserPosts();  // Fetch posts related to the current user
+    fetchUserPosts();
   }
 
   Future<void> _loadUserData() async {
@@ -38,34 +49,23 @@ class _ProfilePageState extends State<ProfilePage> {
 
           String userName = data?['name'] ?? "No Name";
           String userDescription = data?['description'] ?? "Mystery person...";
+          String? avatarUrl = data?['avatarUrl'];
+          String? backgroundUrl = data?['backgroundUrl'];
 
-          // 如果 description 字段不存在，将当前 _userDescription 保存到 Firestore
-          if (data != null && !data.containsKey('description')) {
-            userDescription = "Mystery person...";
-            await _firestore.collection('users').doc(user.uid).set({
-              'description': userDescription,
-            }, SetOptions(merge: true));
-          }
-
-          // 更新状态
           setState(() {
             _userName = userName;
             _userDescription = userDescription;
+            _avatarUrl = avatarUrl;
+            _backgroundUrl = backgroundUrl;
           });
-
         } else {
-          // 如果用户文档不存在，创建一个新的文档并存储当前 _userDescription
-          String defaultUserName = "No User Data Found";
-          String defaultUserDescription = _userDescription;
-
           await _firestore.collection('users').doc(user.uid).set({
-            'name': defaultUserName,
-            'description': defaultUserDescription,
+            'name': "No User Data Found",
+            'description': _userDescription,
           });
 
           setState(() {
-            _userName = defaultUserName;
-            _userDescription = defaultUserDescription;
+            _userName = "No User Data Found";
           });
         }
       } else {
@@ -77,20 +77,6 @@ class _ProfilePageState extends State<ProfilePage> {
       print("Error loading user data: $e");
       setState(() {
         _userName = "Error loading user data";
-      });
-    }
-  }
-
-  void fetchUserPosts() async {
-    User? user = UserRepository.getCurrentUser();
-    if (user != null) {
-      var userPostsSnapshot = await _firestore.collection('posts')
-          .where('userId', isEqualTo: user.uid)
-          .get();
-      var fetchedPosts = userPostsSnapshot.docs.map((doc) => Post.fromFirestore(doc)).toList();
-
-      setState(() {
-        userPosts = fetchedPosts;
       });
     }
   }
@@ -137,6 +123,125 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
+  void fetchUserPosts() async {
+    User? user = UserRepository.getCurrentUser();
+    if (user != null) {
+      var userPostsSnapshot = await _firestore.collection('posts')
+          .where('userId', isEqualTo: user.uid)
+          .get();
+      var fetchedPosts = userPostsSnapshot.docs.map((doc) => Post.fromFirestore(doc)).toList();
+
+      setState(() {
+        userPosts = fetchedPosts;
+      });
+    }
+  }
+
+  Future<void> _cropImage(File imageFile, bool isAvatar) async {
+    final croppedImage = await ImageCropper().cropImage(
+      sourcePath: imageFile.path,
+      aspectRatio: const CropAspectRatio(ratioX: 1.0, ratioY: 1.0),  // Set to square crop
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: isAvatar ? 'Crop Avatar' : 'Crop Background',
+          toolbarColor: Colors.blue,
+          toolbarWidgetColor: Colors.white,
+          lockAspectRatio: true,  // Lock the aspect ratio to enforce square crop
+          hideBottomControls: true,  // Hide controls to enforce crop
+        ),
+        IOSUiSettings(
+          minimumAspectRatio: 1.0,
+          aspectRatioLockEnabled: true,  // Lock the aspect ratio on iOS
+        ),
+      ],
+    );
+
+    if (croppedImage != null) {
+      File croppedFile = File(croppedImage.path);
+      if (isAvatar) {
+        await _updateAvatar(croppedFile);  // Save the cropped image to Firebase
+      } else {
+        await _updateBackground(croppedFile);  // Save the cropped background to Firebase
+      }
+    }
+  }
+
+  Future<void> _updateAvatar(File file) async {
+    User? user = UserRepository.getCurrentUser();
+    if (user != null) {
+      String fileName = 'avatars/${user.uid}.jpg';
+      Reference ref = _storage.ref().child(fileName);
+
+      try {
+        await ref.putFile(file);
+        String avatarUrl = await ref.getDownloadURL();
+
+        await _firestore.collection('users').doc(user.uid).update({
+          'avatarUrl': avatarUrl,
+        });
+
+        setState(() {
+          _avatarUrl = avatarUrl;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Avatar updated successfully!")),
+        );
+      } catch (e) {
+        print("Error uploading avatar: $e");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to upload avatar: $e")),
+        );
+      }
+    }
+  }
+
+  Future<void> _updateBackground(File file) async {
+    User? user = UserRepository.getCurrentUser();
+    if (user != null) {
+      String fileName = 'backgrounds/${user.uid}.jpg';
+      Reference ref = _storage.ref().child(fileName);
+
+      try {
+        await ref.putFile(file);
+        String backgroundUrl = await ref.getDownloadURL();
+
+        await _firestore.collection('users').doc(user.uid).update({
+          'backgroundUrl': backgroundUrl,
+        });
+
+        setState(() {
+          _backgroundUrl = backgroundUrl;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Background updated successfully!")),
+        );
+      } catch (e) {
+        print("Error uploading background: $e");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to upload background: $e")),
+        );
+      }
+    }
+  }
+
+  Future<void> _selectAvatar() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+
+    if (image != null) {
+      _cropImage(File(image.path), true);
+    }
+  }
+
+  Future<void> _selectBackground() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+
+    if (image != null) {
+      _cropImage(File(image.path), false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -150,34 +255,42 @@ class _ProfilePageState extends State<ProfilePage> {
                   clipBehavior: Clip.none,
                   alignment: Alignment.center,
                   children: [
-                    SizedBox(
-                      width: double.infinity,
-                      height: MediaQuery.of(context).size.height * 0.33,
-                      child: Image.asset(
-                        'lib/images/iris.jpg',
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: Colors.grey,
-                            child: const Center(
-                              child: Text(
-                                'Background Image Not Found',
-                                style: TextStyle(color: Colors.white),
+                    GestureDetector(
+                      onTap: _selectBackground,  // Allow the user to change the background
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: MediaQuery.of(context).size.height * 0.33,
+                        child: _backgroundUrl != null
+                            ? Image.network(
+                                _backgroundUrl!,
+                                fit: BoxFit.cover,
+                              )
+                            : Image.asset(
+                                'lib/images/iris.jpg',
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    color: Colors.grey,
+                                    child: const Center(
+                                      child: Text(
+                                        'Background Image Not Found',
+                                        style: TextStyle(color: Colors.white),
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
-                            ),
-                          );
-                        },
                       ),
                     ),
                     Positioned(
                       bottom: -20,
                       child: GestureDetector(
-                        onTap: () {
-                          _showEditDescriptionDialog(context);
-                        },
-                        child: const CircleAvatar(
+                        onTap: _selectAvatar,
+                        child: CircleAvatar(
                           radius: 50,
-                          backgroundImage: AssetImage('lib/images/iris.jpg'),
+                          backgroundImage: _avatarUrl != null
+                              ? NetworkImage(_avatarUrl!)
+                              : const AssetImage('lib/images/iris.jpg') as ImageProvider,
                           backgroundColor: Colors.grey,
                         ),
                       ),
@@ -185,8 +298,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   ],
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(
-                    top: 30, left: 25, right: 25, bottom: 25),
+                  padding: const EdgeInsets.all(25),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -236,7 +348,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      // Use the PostCard widget to display user posts
                       ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
@@ -280,10 +391,10 @@ class _ProfilePageState extends State<ProfilePage> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20.0),
           ),
-          backgroundColor: const Color.fromARGB(255, 255, 255, 255), // 设置整个对话框的背景颜色为白色
+          backgroundColor: const Color.fromARGB(255, 255, 255, 255),
           child: Container(
             padding: const EdgeInsets.all(20.0),
-            width: MediaQuery.of(context).size.width * 0.8, // 设置固定宽度为屏幕宽度的80%
+            width: MediaQuery.of(context).size.width * 0.8,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -298,19 +409,19 @@ class _ProfilePageState extends State<ProfilePage> {
                 const SizedBox(height: 20),
                 TextField(
                   controller: userNameController,
-                  style: const TextStyle(color: Colors.black), // 输入文本的颜色
+                  style: const TextStyle(color: Colors.black),
                   decoration: InputDecoration(
                     hintText: "Enter new User Name",
-                    hintStyle: const TextStyle(color: Colors.black54), // 提示文本颜色
+                    hintStyle: const TextStyle(color: Colors.black54),
                     filled: true,
-                    fillColor: const Color.fromARGB(255, 255, 246, 218), // 淡芒果黄背景色
+                    fillColor: const Color.fromARGB(255, 255, 246, 218),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8.0),
                       borderSide: BorderSide.none,
                     ),
                   ),
                 ),
-                const SizedBox(height: 20), // 添加一点间距
+                const SizedBox(height: 20),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -323,7 +434,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         style: TextStyle(
                           color: Color.fromARGB(255, 255, 206, 57),
                           fontSize: 20,
-                        ), // 设置文本颜色为芒果黄，字体大小为20
+                        ),
                       ),
                     ),
                     TextButton(
@@ -336,7 +447,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         style: TextStyle(
                           color: Color.fromARGB(255, 255, 206, 57),
                           fontSize: 20,
-                        ), // 设置文本颜色为芒果黄，字体大小为20
+                        ),
                       ),
                     ),
                   ],
@@ -359,10 +470,10 @@ class _ProfilePageState extends State<ProfilePage> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20.0),
           ),
-          backgroundColor: const Color.fromARGB(255, 255, 255, 255), // 设置整个对话框的背景颜色为芒果黄
+          backgroundColor: const Color.fromARGB(255, 255, 255, 255),
           child: Container(
             padding: const EdgeInsets.all(20.0),
-            width: MediaQuery.of(context).size.width * 0.8, // 设置固定宽度为屏幕宽度的80%
+            width: MediaQuery.of(context).size.width * 0.8,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -377,23 +488,23 @@ class _ProfilePageState extends State<ProfilePage> {
                 const SizedBox(height: 20),
                 TextField(
                   controller: userDescriptionController,
-                  maxLength: 100, // 限制输入的最大字符数
-                  maxLines: 5, // 限制输入框最多显示的行数
-                  minLines: 5, // 限制输入框最少显示的行数
-                  style: const TextStyle(color: Colors.black), // 输入文本的颜色
+                  maxLength: 100,
+                  maxLines: 5,
+                  minLines: 5,
+                  style: const TextStyle(color: Colors.black),
                   decoration: InputDecoration(
                     hintText: "Enter new description",
-                    hintStyle: const TextStyle(color: Colors.black54), // 提示文本颜色
+                    hintStyle: const TextStyle(color: Colors.black54),
                     filled: true,
-                    fillColor: const Color.fromARGB(255, 255, 246, 218), // 淡芒果黄背景色
+                    fillColor: const Color.fromARGB(255, 255, 246, 218),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8.0),
                       borderSide: BorderSide.none,
                     ),
-                    counterStyle: const TextStyle(color: Colors.black54), // 计数器文本颜色
+                    counterStyle: const TextStyle(color: Colors.black54),
                   ),
                 ),
-                const SizedBox(height: 20), // 添加一点间距
+                const SizedBox(height: 20),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -406,7 +517,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         style: TextStyle(
                           color: Color.fromARGB(255, 255, 206, 57),
                           fontSize: 20,
-                        ), // 设置文本颜色为黑色，字体大小为20
+                        ),
                       ),
                     ),
                     TextButton(
@@ -419,7 +530,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         style: TextStyle(
                           color: Color.fromARGB(255, 255, 206, 57),
                           fontSize: 20,
-                        ), // 设置文本颜色为黑色，字体大小为20
+                        ),
                       ),
                     ),
                   ],
