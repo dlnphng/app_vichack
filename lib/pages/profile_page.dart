@@ -38,36 +38,51 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadUserData() async {
-    try {
-      User? user = _auth.currentUser; // Directly using FirebaseAuth
+  try {
+    User? user = _auth.currentUser;
 
-      if (user != null) {
-        DocumentSnapshot userDoc = await _firestore.collection('users').doc(user.uid).get();
+    if (user != null) {
+      DocumentSnapshot userDoc = await _firestore.collection('users').doc(user.uid).get();
 
-        if (userDoc.exists) {
-          setState(() {
-            _userName = userDoc.get('name') ?? "No Name";
-            _userDescription = userDoc.get('description') ?? "Mystery person...";
-            _avatarUrl = userDoc.get('avatarUrl');
-            _backgroundUrl = userDoc.get('backgroundUrl');
-          });
-        } else {
-          setState(() {
-            _userName = "No User Data Found";
-          });
-        }
+      if (userDoc.exists) {
+        final data = userDoc.data() as Map<String, dynamic>?;  // Cast data to Map<String, dynamic>
+
+        setState(() {
+          _userName = data?['name'] ?? "No Name";
+          
+          // Check if the 'description' field exists and handle it accordingly
+          if (data != null && data.containsKey('description')) {
+            _userDescription = data['description'] ?? "Mystery person...";
+          } else {
+            _userDescription = "Mystery person...";
+            // Save the default description to Firestore if it does not exist
+            _firestore.collection('users').doc(user.uid).update({
+              'description': _userDescription,
+            });
+          }
+
+          _avatarUrl = data?['avatarUrl'];
+          _backgroundUrl = data?['backgroundUrl'];
+        });
       } else {
         setState(() {
-          _userName = "Guest";
+          _userName = "No User Data Found";
         });
       }
-    } catch (e) {
-      print("Error loading user data: $e");
+    } else {
       setState(() {
-        _userName = "Error loading user data";
+        _userName = "Guest";
       });
     }
+  } catch (e) {
+    print("Error loading user data: $e");
+    setState(() {
+      _userName = "Error loading user data";
+    });
   }
+}
+
+
 
   void firebaseUpdateUserDescription(String newDescription) async {
     setState(() {
@@ -276,10 +291,15 @@ class _ProfilePageState extends State<ProfilePage> {
                         onTap: _selectAvatar,
                         child: CircleAvatar(
                           radius: 50,
-                          backgroundImage: _avatarUrl != null
-                              ? NetworkImage(_avatarUrl!)
-                              : const AssetImage('lib/images/iris.jpg') as ImageProvider,
-                          backgroundColor: Colors.grey,
+                          backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
+                          backgroundColor: Color.fromARGB(255, 252, 186, 85),
+                          child: _avatarUrl == null 
+                              ? const Icon(
+                                  Icons.account_circle, 
+                                  size: 100.0, 
+                                  color: Colors.white,
+                                )
+                              : null,
                         ),
                       ),
                     ),

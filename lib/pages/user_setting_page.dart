@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Import Firestore
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_page.dart';
-import 'home_page.dart'; // Import the UserRepository
+import 'home_page.dart';
 
 class UserSettingPage extends StatefulWidget {
   const UserSettingPage({Key? key}) : super(key: key);
@@ -30,11 +30,12 @@ class _UserSettingPageState extends State<UserSettingPage> {
       if (userDoc.exists) {
         setState(() {
           _userName = userDoc.get('name') ?? 'User Name';
-          _avatarUrl = userDoc.get('avatarUrl') ?? 'https://via.placeholder.com/150';
+          _avatarUrl = userDoc.get('avatarUrl');
         });
       }
     }
   }
+
 
   void _logout(BuildContext context) async {
     // Sign out from Firebase
@@ -71,7 +72,17 @@ class _UserSettingPageState extends State<UserSettingPage> {
                   // Display the user avatar
                   CircleAvatar(
                     radius: 60,
-                    backgroundImage: NetworkImage(_avatarUrl ?? 'https://via.placeholder.com/150'),
+                    backgroundImage: _avatarUrl != null 
+                        ? NetworkImage(_avatarUrl!) 
+                        : null,  // If _avatarUrl is not null, display the image
+                    backgroundColor: Color.fromARGB(255, 252, 186, 85),
+                    child: _avatarUrl == null 
+                        ? const Icon(
+                            Icons.account_circle, 
+                            size: 120, 
+                            color: Colors.white,
+                          ) 
+                        : null,  // If _avatarUrl is null, display a default icon
                   ),
                   const SizedBox(height: 20),
                   // Display the user name
