@@ -1,4 +1,12 @@
+import 'dart:io';
+import 'package:app_vichack/pages/home_page.dart';
+import 'package:app_vichack/pages/login_page.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -8,19 +16,233 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  String _userName = "Initial Name"; // Initial user name
-  String _userDescription = "Description: Iris, third year Monash student! balabalabalabalbalablabalblablbalbalablababbbbbbalabalbalablablablablablabalabla";
+  String _userName = "Loading...";
+  String _userDescription = "Mystery person...";
+  String? _avatarUrl; // URL of the avatar image
+  String? _backgroundUrl; // URL of the background image
+  File? _selectedImage; // File to store the selected image before cropping
+  File? _selectedBackgroundImage; // File to store the selected background image before cropping
+  List<Post> userPosts = [];
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
+
+  final ImagePicker _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+    fetchUserPosts();
+  }
+
+  Future<void> _loadUserData() async {
+  try {
+    User? user = _auth.currentUser;
+
+    if (user != null) {
+      DocumentSnapshot userDoc = await _firestore.collection('users').doc(user.uid).get();
+
+      if (userDoc.exists) {
+        final data = userDoc.data() as Map<String, dynamic>?;  // Cast data to Map<String, dynamic>
+
+        setState(() {
+          _userName = data?['name'] ?? "No Name";
+          
+          // Check if the 'description' field exists and handle it accordingly
+          if (data != null && data.containsKey('description')) {
+            _userDescription = data['description'] ?? "Mystery person...";
+          } else {
+            _userDescription = "Mystery person...";
+            // Save the default description to Firestore if it does not exist
+            _firestore.collection('users').doc(user.uid).update({
+              'description': _userDescription,
+            });
+          }
+
+          _avatarUrl = data?['avatarUrl'];
+          _backgroundUrl = data?['backgroundUrl'];
+        });
+      } else {
+        setState(() {
+          _userName = "No User Data Found";
+        });
+      }
+    } else {
+      setState(() {
+        _userName = "Guest";
+      });
+    }
+  } catch (e) {
+    print("Error loading user data: $e");
+    setState(() {
+      _userName = "Error loading user data";
+    });
+  }
+}
+
+
+
+  void firebaseUpdateUserDescription(String newDescription) async {
+    setState(() {
+      _userDescription = newDescription;
+    });
+
+    // Save the new description to Firestore
+    User? user = _auth.currentUser;
+    if (user != null) {
+      await _firestore.collection('users').doc(user.uid).set({
+        'description': newDescription,
+      }, SetOptions(merge: true));
+    }
+  }
+
+  void firebaseUpdateUserName(String newName) async {
+    setState(() {
+      _userName = newName;
+    });
+
+    // Save the new name to Firestore
+    User? user = _auth.currentUser;
+    if (user != null) {
+      await _firestore.collection('users').doc(user.uid).set({
+        'name': newName,
+      }, SetOptions(merge: true));
+    }
+  }
 
   void updateUserName(String newName) {
     setState(() {
       _userName = newName; // Update the user name
+      firebaseUpdateUserName(newName);
     });
   }
 
   void updateUserDescription(String newDescription) {
     setState(() {
       _userDescription = newDescription;
+      firebaseUpdateUserDescription(newDescription);
     });
+  }
+
+  void fetchUserPosts() async {
+    User? user = _auth.currentUser;
+    if (user != null) {
+      var userPostsSnapshot = await _firestore.collection('posts')
+          .where('userId', isEqualTo: user.uid)
+          .get();
+      var fetchedPosts = userPostsSnapshot.docs.map((doc) => Post.fromFirestore(doc)).toList();
+
+      setState(() {
+        userPosts = fetchedPosts;
+      });
+    }
+  }
+
+  Future<void> _cropImage(File imageFile, bool isAvatar) async {
+    final croppedImage = await ImageCropper().cropImage(
+      sourcePath: imageFile.path,
+      aspectRatio: const CropAspectRatio(ratioX: 1.0, ratioY: 1.0),  // Set to square crop
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: isAvatar ? 'Crop Avatar' : 'Crop Background',
+          toolbarColor: Colors.blue,
+          toolbarWidgetColor: Colors.white,
+          lockAspectRatio: true,  // Lock the aspect ratio to enforce square crop
+          hideBottomControls: true,  // Hide controls to enforce crop
+        ),
+        IOSUiSettings(
+          minimumAspectRatio: 1.0,
+          aspectRatioLockEnabled: true,  // Lock the aspect ratio on iOS
+        ),
+      ],
+    );
+
+    if (croppedImage != null) {
+      File croppedFile = File(croppedImage.path);
+      if (isAvatar) {
+        await _updateAvatar(croppedFile);  // Save the cropped image to Firebase
+      } else {
+        await _updateBackground(croppedFile);  // Save the cropped background to Firebase
+      }
+    }
+  }
+
+  Future<void> _updateAvatar(File file) async {
+    User? user = _auth.currentUser;
+    if (user != null) {
+      String fileName = 'avatars/${user.uid}.jpg';
+      Reference ref = _storage.ref().child(fileName);
+
+      try {
+        await ref.putFile(file);
+        String avatarUrl = await ref.getDownloadURL();
+
+        await _firestore.collection('users').doc(user.uid).update({
+          'avatarUrl': avatarUrl,
+        });
+
+        setState(() {
+          _avatarUrl = avatarUrl;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Avatar updated successfully!")),
+        );
+      } catch (e) {
+        print("Error uploading avatar: $e");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to upload avatar: $e")),
+        );
+      }
+    }
+  }
+
+  Future<void> _updateBackground(File file) async {
+    User? user = _auth.currentUser;
+    if (user != null) {
+      String fileName = 'backgrounds/${user.uid}.jpg';
+      Reference ref = _storage.ref().child(fileName);
+
+      try {
+        await ref.putFile(file);
+        String backgroundUrl = await ref.getDownloadURL();
+
+        await _firestore.collection('users').doc(user.uid).update({
+          'backgroundUrl': backgroundUrl,
+        });
+
+        setState(() {
+          _backgroundUrl = backgroundUrl;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Background updated successfully!")),
+        );
+      } catch (e) {
+        print("Error uploading background: $e");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to upload background: $e")),
+        );
+      }
+    }
+  }
+
+  Future<void> _selectAvatar() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+
+    if (image != null) {
+      _cropImage(File(image.path), true);
+    }
+  }
+
+  Future<void> _selectBackground() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+
+    if (image != null) {
+      _cropImage(File(image.path), false);
+    }
   }
 
   @override
@@ -29,62 +251,65 @@ class _ProfilePageState extends State<ProfilePage> {
       backgroundColor: const Color(0xFFFAFAFA),
       body: Stack(
         children: [
-          // Scrollable content
           SingleChildScrollView(
             child: Column(
               children: [
-                // Stack to overlap CircleAvatar on background image
                 Stack(
-                  clipBehavior: Clip.none, // Ensure overflow is visible
-                  alignment: Alignment.center, // Align center
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
                   children: [
-                    // User page background image
-                    SizedBox(
-                      width: double.infinity,
-                      height: MediaQuery.of(context).size.height * 0.33,
-                      child: Image.asset(
-                        'lib/images/iris.jpg',
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: Colors.grey,
-                            child: const Center(
-                              child: Text(
-                                'Background Image Not Found',
-                                style: TextStyle(color: Colors.white),
+                    GestureDetector(
+                      onTap: _selectBackground,  // Allow the user to change the background
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: MediaQuery.of(context).size.height * 0.33,
+                        child: _backgroundUrl != null
+                            ? Image.network(
+                                _backgroundUrl!,
+                                fit: BoxFit.cover,
+                              )
+                            : Image.asset(
+                                'lib/images/iris.jpg',
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    color: Colors.grey,
+                                    child: const Center(
+                                      child: Text(
+                                        'Background Image Not Found',
+                                        style: TextStyle(color: Colors.white),
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
-                            ),
-                          );
-                        },
                       ),
                     ),
-                    // CircleAvatar overlapping the background image
                     Positioned(
-                      bottom: -20, // Position the CircleAvatar to overlap
+                      bottom: -20,
                       child: GestureDetector(
-                        onTap: () {
-                          // Define action when the avatar is tapped
-                          print("Avatar tapped!");
-                          _showEditDescriptionDialog(context);
-                        },
-                        child: const CircleAvatar(
+                        onTap: _selectAvatar,
+                        child: CircleAvatar(
                           radius: 50,
-                          backgroundImage: AssetImage('lib/images/iris.jpg'),
-                          backgroundColor: Colors.grey,
+                          backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
+                          backgroundColor: Color.fromARGB(255, 252, 186, 85),
+                          child: _avatarUrl == null 
+                              ? const Icon(
+                                  Icons.account_circle, 
+                                  size: 100.0, 
+                                  color: Colors.white,
+                                )
+                              : null,
                         ),
                       ),
                     ),
                   ],
                 ),
-                
-                // Padding to account for the overlap
                 Padding(
-                  padding: const EdgeInsets.only(
-                    top: 30, left: 25, right: 25, bottom: 25),
+                  padding: const EdgeInsets.all(25),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Row to position the UserName and edit icon
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -95,24 +320,19 @@ class _ProfilePageState extends State<ProfilePage> {
                               fontSize: 20,
                             ),
                           ),
-
-                          // Edit username button
                           IconButton(
                             icon: const Icon(
-                              Icons.edit, 
-                              color: Colors.grey, 
-                              size: 15, // Set icon size
+                              Icons.edit,
+                              color: Colors.grey,
+                              size: 15,
                             ),
                             onPressed: () {
-                              // Show dialog to edit the username
                               _showEditUserNameDialog(context);
                             },
                           ),
                         ],
                       ),
                       const SizedBox(height: 10),
-
-                      // Description
                       Text(
                         _userDescription,
                         style: const TextStyle(
@@ -120,37 +340,29 @@ class _ProfilePageState extends State<ProfilePage> {
                           fontSize: 15,
                         ),
                       ),
-
-                      // Edit user description button with alignment in Row
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.end, // Align icon to the end (right)
+                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           IconButton(
                             icon: const Icon(
-                              Icons.edit, 
-                              color: Colors.grey, 
-                              size: 15, // Set icon size
+                              Icons.edit,
+                              color: Colors.grey,
+                              size: 15,
                             ),
                             onPressed: () {
-                              // Show dialog to edit the description
                               _showEditDescriptionDialog(context);
                             },
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 10),
-
-                      // Posts section
-                      ...List.generate(
-                        30, // Generate 30 posts for demonstration
-                        (index) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Text(
-                            "Post $index",
-                            style: const TextStyle(color: Colors.black),
-                          ),
-                        ),
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: userPosts.length,
+                        itemBuilder: (context, index) {
+                          return PostCard(post: userPosts[index]);
+                        },
                       ),
                     ],
                   ),
@@ -158,9 +370,8 @@ class _ProfilePageState extends State<ProfilePage> {
               ],
             ),
           ),
-          // Fixed back button that does not scroll
           Positioned(
-            top: 40, // Adjust this based on the device's status bar height
+            top: 40,
             left: 10,
             child: IconButton(
               icon: const Icon(
@@ -169,7 +380,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 size: 32,
               ),
               onPressed: () {
-                Navigator.of(context).pop(); // Go back to previous page
+                Navigator.of(context).pop();
               },
             ),
           ),
@@ -178,102 +389,165 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // Function to show the pop-up page for editing username
   void _showEditUserNameDialog(BuildContext context) {
     final TextEditingController userNameController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Edit User Name'),
-          content: TextField(
-            controller: userNameController,
-            decoration: const InputDecoration(hintText: "Enter new User Name"),
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20.0),
           ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-              },
-              child: const Text('Cancel'),
+          backgroundColor: const Color.fromARGB(255, 255, 255, 255),
+          child: Container(
+            padding: const EdgeInsets.all(20.0),
+            width: MediaQuery.of(context).size.width * 0.8,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Edit User Name',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: userNameController,
+                  style: const TextStyle(color: Colors.black),
+                  decoration: InputDecoration(
+                    hintText: "Enter new User Name",
+                    hintStyle: const TextStyle(color: Colors.black54),
+                    filled: true,
+                    fillColor: const Color.fromARGB(255, 255, 246, 218),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Color.fromARGB(255, 255, 206, 57),
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        updateUserName(userNameController.text);
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text(
+                        'Save',
+                        style: TextStyle(
+                          color: Color.fromARGB(255, 255, 206, 57),
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            TextButton(
-              onPressed: () {
-                // Update the userName and close the dialog
-                print("New Username saved");
-                updateUserName(userNameController.text);
-                Navigator.of(context).pop(); // Close the dialog
-              },
-              child: const Text('Save'),
-            ),
-          ],
+          ),
         );
       },
     );
   }
 
-  // Function to show the pop-up page for editing description
   void _showEditDescriptionDialog(BuildContext context) {
-    final TextEditingController userDeescriptionController = TextEditingController();
+    final TextEditingController userDescriptionController = TextEditingController(text: _userDescription);
 
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Edit Description'),
-          content: TextField(
-            controller: userDeescriptionController,
-            decoration: const InputDecoration(hintText: "Enter new description"),
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20.0),
           ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
-              },
-              child: const Text('Cancel'),
+          backgroundColor: const Color.fromARGB(255, 255, 255, 255),
+          child: Container(
+            padding: const EdgeInsets.all(20.0),
+            width: MediaQuery.of(context).size.width * 0.8,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Edit Description',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: userDescriptionController,
+                  maxLength: 100,
+                  maxLines: 5,
+                  minLines: 5,
+                  style: const TextStyle(color: Colors.black),
+                  decoration: InputDecoration(
+                    hintText: "Enter new description",
+                    hintStyle: const TextStyle(color: Colors.black54),
+                    filled: true,
+                    fillColor: const Color.fromARGB(255, 255, 246, 218),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                      borderSide: BorderSide.none,
+                    ),
+                    counterStyle: const TextStyle(color: Colors.black54),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Color.fromARGB(255, 255, 206, 57),
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        updateUserDescription(userDescriptionController.text);
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text(
+                        'Save',
+                        style: TextStyle(
+                          color: Color.fromARGB(255, 255, 206, 57),
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            TextButton(
-              onPressed: () {
-                // Save the new description
-                print("New description saved");
-                updateUserDescription(userDeescriptionController.text);
-                Navigator.of(context).pop(); // Close the dialog
-              },
-              child: const Text('Save'),
-            ),
-          ],
+          ),
         );
       },
-    );
-  }
-}
-
-// The full-screen pop-up page
-class AvatarEditPage extends StatelessWidget {
-  const AvatarEditPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Edit Avatar'),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('This is the full-screen page where you can edit your avatar.'),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close the pop-up screen
-              },
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
