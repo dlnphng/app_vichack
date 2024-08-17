@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'savedpost_page.dart';
-import 'login_page.dart';
-import 'custom_drawer.dart';  // Import your custom drawer widget
-import 'create_post_bottom_sheet.dart'; // Import your bottom sheet widget
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
-
+import 'custom_drawer.dart';
+import 'create_post_bottom_sheet.dart';
+import 'savedpost_page.dart';  // Import your saved posts page
+import 'login_page.dart';  // Assuming the UserProvider and UserModel are defined in login_page.dart
 
 // Post Model
 class Post {
@@ -16,7 +14,7 @@ class Post {
   final String userImage;
   final String postTitle;
   final String postContent;
-  final List<String> postImageUrls;  // Change this to a list of strings
+  final List<String> postImageUrls;
   final String category;
   final int likes;
   final int comments;
@@ -29,7 +27,7 @@ class Post {
     required this.userImage,
     required this.postTitle,
     required this.postContent,
-    required this.postImageUrls,  // Adjust constructor
+    required this.postImageUrls,
     required this.category,
     required this.likes,
     required this.comments,
@@ -45,7 +43,7 @@ class Post {
       userImage: userData['userImage'] ?? 'default_avatar.png',
       postTitle: postData['title'] ?? 'No Title',
       postContent: postData['content'] ?? '',
-      postImageUrls: List<String>.from(postData['imageUrls'] ?? []),  // Get list of image URLs
+      postImageUrls: List<String>.from(postData['imageUrls'] ?? []),
       category: postData['category'] ?? 'General',
       likes: int.parse(postData['likeNo']?.toString() ?? '0'),
       comments: int.parse(postData['cmtNo']?.toString() ?? '0'),
@@ -54,31 +52,71 @@ class Post {
   }
 }
 
-class PostCard extends StatelessWidget {
+// PostCard Widget
+class PostCard extends StatefulWidget {
   final Post post;
 
   const PostCard({Key? key, required this.post}) : super(key: key);
 
-  void _showImageGallery(BuildContext context, List<String> imageUrls, int initialPage) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => Scaffold(
-          appBar: AppBar(
-            backgroundColor: Colors.black,
-          ),
-          backgroundColor: Colors.black,
-          body: PageView.builder(
-            itemCount: imageUrls.length,
-            controller: PageController(initialPage: initialPage),
-            itemBuilder: (context, index) => InteractiveViewer(
-              child: Image.network(imageUrls[index], fit: BoxFit.contain),
-            ),
-          ),
-        ),
-      ),
-    );
+  @override
+  _PostCardState createState() => _PostCardState();
+}
+
+class _PostCardState extends State<PostCard> {
+  bool isSaved = false;
+
+  @override
+  void initState() {
+    super.initState();
+    checkIfSaved();
   }
 
+  // Check if the post is already saved when the widget is initialized
+  void checkIfSaved() async {
+    final userId = Provider.of<UserProvider>(context, listen: false).user?.id;
+    if (userId == null) return;
+
+    final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+    final savedPostIds = List<String>.from(userDoc['savedPosts'] ?? []);
+
+    // Update the state based on whether the post is saved or not
+    setState(() {
+      isSaved = savedPostIds.contains(widget.post.id);
+    });
+  }
+
+  // Toggle the save state of the post
+  Future<void> toggleSavePost() async {
+    final userId = Provider.of<UserProvider>(context, listen: false).user?.id;
+    if (userId == null) return;
+
+    final userDocRef = FirebaseFirestore.instance.collection('users').doc(userId);
+
+    FirebaseFirestore.instance.runTransaction((transaction) async {
+      DocumentSnapshot userDocSnapshot = await transaction.get(userDocRef);
+      if (!userDocSnapshot.exists) {
+        throw Exception("User not found!");
+      }
+
+      List<dynamic> savedPosts = userDocSnapshot['savedPosts'] ?? [];
+
+      if (savedPosts.contains(widget.post.id)) {
+        transaction.update(userDocRef, {
+          'savedPosts': FieldValue.arrayRemove([widget.post.id])
+        });
+        setState(() {
+          isSaved = false;  // Update state to reflect the post is unsaved
+        });
+      } else {
+        transaction.update(userDocRef, {
+          'savedPosts': FieldValue.arrayUnion([widget.post.id])
+        });
+        setState(() {
+          isSaved = true;  // Update state to reflect the post is saved
+        });
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -97,26 +135,33 @@ class PostCard extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 24.0,
-                  backgroundImage: NetworkImage(post.userImage),
+                  backgroundImage: NetworkImage(widget.post.userImage),
                 ),
                 SizedBox(width: 12.0),
                 Expanded(
                   child: Text(
-                    post.userName,
+                    widget.post.userName,
                     style: TextStyle(
                       fontSize: 16.0,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
-                Icon(Icons.star),
+                // IconButton to toggle save state
+                IconButton(
+                  icon: Icon(
+                    isSaved ? Icons.star : Icons.star_border,
+                    color: isSaved ? Colors.yellow : Colors.grey,
+                  ),
+                  onPressed: toggleSavePost,
+                ),
               ],
             ),
             SizedBox(height: 16.0),
-            _buildImageDisplay(context),
+            buildImageDisplay(context),
             SizedBox(height: 16.0),
             Text(
-              post.postTitle,
+              widget.post.postTitle,
               style: TextStyle(
                 fontSize: 18.0,
                 fontWeight: FontWeight.bold,
@@ -124,17 +169,10 @@ class PostCard extends StatelessWidget {
             ),
             SizedBox(height: 8.0),
             Text(
-              post.postContent,
+              widget.post.postContent,
               style: TextStyle(
                 fontSize: 14.0,
               ),
-            ),
-            SizedBox(height: 8.0),
-            TextButton(
-              onPressed: () {
-                // Implement "More" functionality here
-              },
-              child: Text("More"),
             ),
             Divider(),
             Row(
@@ -144,14 +182,14 @@ class PostCard extends StatelessWidget {
                   children: [
                     Icon(Icons.comment, color: Colors.grey),
                     SizedBox(width: 4.0),
-                    Text(post.comments.toString()),
+                    Text(widget.post.comments.toString()),
                   ],
                 ),
                 Row(
                   children: [
                     Icon(Icons.favorite, color: Colors.red),
                     SizedBox(width: 4.0),
-                    Text(post.likes.toString()),
+                    Text(widget.post.likes.toString()),
                   ],
                 ),
               ],
@@ -162,25 +200,25 @@ class PostCard extends StatelessWidget {
     );
   }
 
-  Widget _buildImageDisplay(BuildContext context) {
-    int imageCount = post.postImageUrls.length;
+  Widget buildImageDisplay(BuildContext context) {
+    int imageCount = widget.post.postImageUrls.length;
 
-    if (imageCount == 0) {  
-      return Container();  // Returns an empty container when there are no images
+    if (imageCount == 0) {
+      return Container();
     }
 
     switch (imageCount) {
       case 1:
         return GestureDetector(
-          onTap: () => _showImageGallery(context, post.postImageUrls, 0),
-          child: Image.network(post.postImageUrls.first, fit: BoxFit.cover, width: double.infinity, height: 200),
+          onTap: () => showImageGallery(context, widget.post.postImageUrls, 0),
+          child: Image.network(widget.post.postImageUrls.first, fit: BoxFit.cover, width: double.infinity, height: 200),
         );
       case 2:
         return Row(
-          children: post.postImageUrls.map((url) {
+          children: widget.post.postImageUrls.map((url) {
             return Expanded(
               child: GestureDetector(
-                onTap: () => _showImageGallery(context, post.postImageUrls, post.postImageUrls.indexOf(url)),
+                onTap: () => showImageGallery(context, widget.post.postImageUrls, widget.post.postImageUrls.indexOf(url)),
                 child: Image.network(url, fit: BoxFit.cover, height: 200),
               ),
             );
@@ -191,20 +229,20 @@ class PostCard extends StatelessWidget {
           children: [
             Expanded(
               child: GestureDetector(
-                onTap: () => _showImageGallery(context, post.postImageUrls, 0),
-                child: Image.network(post.postImageUrls[0], fit: BoxFit.cover, height: 300),
+                onTap: () => showImageGallery(context, widget.post.postImageUrls, 0),
+                child: Image.network(widget.post.postImageUrls[0], fit: BoxFit.cover, height: 300),
               ),
             ),
             Expanded(
               child: Column(
                 children: [
                   GestureDetector(
-                    onTap: () => _showImageGallery(context, post.postImageUrls, 1),
-                    child: Image.network(post.postImageUrls[1], fit: BoxFit.cover, height: 150),
+                    onTap: () => showImageGallery(context, widget.post.postImageUrls, 1),
+                    child: Image.network(widget.post.postImageUrls[1], fit: BoxFit.cover, height: 150),
                   ),
                   GestureDetector(
-                    onTap: () => _showImageGallery(context, post.postImageUrls, 2),
-                    child: Image.network(post.postImageUrls[2], fit: BoxFit.cover, height: 150),
+                    onTap: () => showImageGallery(context, widget.post.postImageUrls, 2),
+                    child: Image.network(widget.post.postImageUrls[2], fit: BoxFit.cover, height: 150),
                   ),
                 ],
               ),
@@ -221,20 +259,20 @@ class PostCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: GestureDetector(
-                        onTap: () => _showImageGallery(context, post.postImageUrls, 0),
-                        child: Image.network(post.postImageUrls[0], fit: BoxFit.cover, height: 300),
+                        onTap: () => showImageGallery(context, widget.post.postImageUrls, 0),
+                        child: Image.network(widget.post.postImageUrls[0], fit: BoxFit.cover, height: 300),
                       ),
                     ),
                     Expanded(
                       child: Column(
                         children: [
                           GestureDetector(
-                            onTap: () => _showImageGallery(context, post.postImageUrls, 1),
-                            child: Image.network(post.postImageUrls[1], fit: BoxFit.cover, height: 150),
+                            onTap: () => showImageGallery(context, widget.post.postImageUrls, 1),
+                            child: Image.network(widget.post.postImageUrls[1], fit: BoxFit.cover, height: 150),
                           ),
                           GestureDetector(
-                            onTap: () => _showImageGallery(context, post.postImageUrls, 2),
-                            child: Image.network(post.postImageUrls[2], fit: BoxFit.cover, height: 150),
+                            onTap: () => showImageGallery(context, widget.post.postImageUrls, 2),
+                            child: Image.network(widget.post.postImageUrls[2], fit: BoxFit.cover, height: 150),
                           ),
                         ],
                       ),
@@ -245,7 +283,7 @@ class PostCard extends StatelessWidget {
             ),
             if (imageCount > 3) Container(
               width: 165,
-              height: 150,  // Adjusted overlay height to match the image heights
+              height: 150,
               color: Colors.black45,
               child: Center(
                 child: Text(
@@ -259,6 +297,25 @@ class PostCard extends StatelessWidget {
     }
   }
 
+  void showImageGallery(BuildContext context, List<String> imageUrls, int initialPage) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+          ),
+          backgroundColor: Colors.black,
+          body: PageView.builder(
+            itemCount: imageUrls.length,
+            controller: PageController(initialPage: initialPage),
+            itemBuilder: (context, index) => InteractiveViewer(
+              child: Image.network(imageUrls[index], fit: BoxFit.contain),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // Home Page
@@ -271,10 +328,10 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  List<Post> allPosts = []; // Holds all fetched posts
-  List<Post> displayedPosts = []; // Posts to display based on filter
+  List<Post> allPosts = [];
+  List<Post> displayedPosts = [];
 
-  int _currentPage = 0; 
+  int _currentPage = 0;
 
   @override
   void initState() {
@@ -282,23 +339,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_handleTabSelection);
     fetchPosts();
-    // Listen to filter changes
-    Provider.of<PostFilterProvider>(context, listen: false).addListener(_applyFilter);
-  }
-
-    void _applyFilter() {
-    String? filterType = Provider.of<PostFilterProvider>(context, listen: false).filterType;
-    if (_tabController.index == 0 && filterType != null) { // Only apply filter to "Club" posts
-      setState(() {
-        displayedPosts = allPosts.where((post) =>
-          post.category == "Club" && post.eventTypes.contains(filterType)).toList();
-      });
-    } else {
-      // Reset or apply different filters based on tab
-      setState(() {
-        displayedPosts = allPosts.where((post) => post.category == (_tabController.index == 0 ? "Club" : "Social")).toList();
-      });
-    }
   }
 
   void _handleTabSelection() {
@@ -310,54 +350,48 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   void applyFilter(String? filterType) {
     setState(() {
       if (filterType == null) {
-        displayedPosts = allPosts; // No filter, show all posts
+        displayedPosts = allPosts;
       } else {
         displayedPosts = allPosts.where((post) => post.category == filterType).toList();
       }
     });
   }
 
-  void _navigateToSocial() {
-    setState(() {
-      _currentPage = 1; // Set to 1 for your new page
-    });
+  void _navigateToSavedPosts() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => SavedPostsPage()), // Navigate to SavedPostsPage
+    );
   }
 
   void fetchPosts() async {
     try {
-      // Fetch all posts
       var firestorePosts = await FirebaseFirestore.instance.collection('posts').get();
       List<Post> fetchedPosts = [];
-      
-      // Fetch user details for each post and create Post objects
+
       for (var doc in firestorePosts.docs) {
         var postData = doc.data() as Map<String, dynamic>;
-        
-        // Check if user ID is available and fetch user details
         if (postData.containsKey('userId') && postData['userId'] != null) {
           var userDoc = await FirebaseFirestore.instance.collection('users').doc(postData['userId']).get();
           var userData = userDoc.data() as Map<String, dynamic>;
-          
-          // Create a new post object with user details
+
           fetchedPosts.add(Post.fromFirestoreWithUser(doc, userData));
         }
       }
-      
+
       setState(() {
         allPosts = fetchedPosts;
-        applyFilter(_tabController.index == 0 ? "Club" : "Social"); // Apply filter based on the current tab
+        applyFilter(_tabController.index == 0 ? "Club" : "Social");
       });
     } catch (e) {
       print('Error fetching posts: $e');
     }
   }
 
-
   @override
   void dispose() {
     _tabController.removeListener(_handleTabSelection);
     _tabController.dispose();
-    Provider.of<PostFilterProvider>(context, listen: false).removeListener(_applyFilter);
     super.dispose();
   }
 
@@ -365,7 +399,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     showModalBottomSheet(
       context: context,
       builder: (BuildContext context) {
-        return const CreatePostBottomSheet(); // Use the separate widget here
+        return const CreatePostBottomSheet();
       },
     );
   }
@@ -376,7 +410,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        toolbarHeight: 56, // Height of the AppBar
+        toolbarHeight: 56,
         leading: Builder(
           builder: (context) {
             return IconButton(
@@ -388,14 +422,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           },
         ),
         title: Container(
-          height: 25, // Height of the search field
+          height: 25,
           child: TextField(
             decoration: InputDecoration(
               prefixIcon: SizedBox(
-                width: 15, // Adjust width of the search icon
-                child: Icon(Icons.search,
-                    color: Colors.grey,
-                    size: 24), // Adjust size of the search icon
+                width: 15,
+                child: Icon(Icons.search, color: Colors.grey, size: 24),
               ),
               hintText: 'Search...',
               filled: true,
@@ -404,8 +436,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide.none,
               ),
-              contentPadding: EdgeInsets.symmetric(
-                  horizontal: 8), // Adjust padding inside the search field
+              contentPadding: EdgeInsets.symmetric(horizontal: 8),
             ),
           ),
         ),
@@ -418,12 +449,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           ),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(30.0), // Height of the TabBar
+          preferredSize: const Size.fromHeight(30.0),
           child: TabBar(
             controller: _tabController,
-            indicatorColor: Colors.black, // Color of the underline
-            labelColor: Colors.black, // Text color for selected tab
-            // unselectedLabelColor: Colors.grey, // Text color for unselected tabs
+            indicatorColor: Colors.black,
+            labelColor: Colors.black,
             tabs: [
               Tab(text: 'Club'),
               Tab(text: 'Social'),
@@ -435,14 +465,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       body: TabBarView(
         controller: _tabController,
         children: [
-          // Display the filtered list of posts for "Club"
           ListView.builder(
             itemCount: displayedPosts.length,
             itemBuilder: (context, index) {
               return PostCard(post: displayedPosts[index]);
             },
           ),
-          // Display the filtered list of posts for "Social"
           ListView.builder(
             itemCount: displayedPosts.length,
             itemBuilder: (context, index) {
@@ -469,16 +497,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 },
               ),
             ),
-            Spacer(), // Pushes the floating action button to the center
+            Spacer(),
             Expanded(
               child: IconButton(
                 icon: const Icon(Icons.star),
-                onPressed: () {
-                  // Handle star icon press
-                  Navigator.push(context,
-                    MaterialPageRoute(builder: (context) => YourNewPage()),
-                  );
-                },
+                onPressed: _navigateToSavedPosts,
               ),
             ),
           ],
