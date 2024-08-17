@@ -36,22 +36,23 @@ class Post {
     required this.eventTypes,  // Add this line
   });
 
-  factory Post.fromFirestore(DocumentSnapshot doc) {
-    Map data = doc.data() as Map;
+  factory Post.fromFirestoreWithUser(DocumentSnapshot postDoc, Map<String, dynamic> userData) {
+    var postData = postDoc.data() as Map<String, dynamic>;
     return Post(
-      id: doc.id,
-      userId: data['userId'] ?? '',
-      userName: data['userName'] ?? 'Unknown User',
-      userImage: data['userImage'] ?? 'default_avatar.png',
-      postTitle: data['title'] ?? 'No Title',
-      postContent: data['content'] ?? '',
-      postImageUrl: data['imageUrl'] ?? 'default_post_image.png',
-      category: data['category'] ?? 'General',
-      likes: data['likeNo'] ?? 0,
-      comments: data['cmtNo'] ?? 0,
-      eventTypes: List<String>.from(data['eventTypes'] ?? []),  // Parse the list
+      id: postDoc.id,
+      userId: postData['userId'] ?? '',
+      userName: userData['name'] ?? 'Unknown User',
+      userImage: userData['userImage'] ?? 'default_avatar.png',
+      postTitle: postData['title'] ?? 'No Title',
+      postContent: postData['content'] ?? '',
+      postImageUrl: postData['imageUrl'] ?? 'default_post_image.png',
+      category: postData['category'] ?? 'General',
+      likes: int.parse(postData['likeNo']?.toString() ?? '0'),
+      comments: int.parse(postData['cmtNo']?.toString() ?? '0'),
+      eventTypes: List<String>.from(postData['eventTypes'] ?? []),
     );
   }
+
 }
 
 class PostCard extends StatelessWidget {
@@ -216,25 +217,29 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     });
   }
 
-  // void fetchPosts() async {
-  //   try {
-  //     var firestorePosts = await FirebaseFirestore.instance.collection('posts').get();
-  //     List<Post> fetchedPosts = firestorePosts.docs.map((doc) => Post.fromFirestore(doc)).toList();
-  //     setState(() {
-  //       allPosts = fetchedPosts;
-  //       applyFilter(_tabController.index == 0 ? "Club" : "Social"); // Apply filter based on the current tab
-  //     });
-  //   } catch (e) {
-  //     print('Error fetching posts: $e');
-  //   }
-  // }
-
   void fetchPosts() async {
     try {
+      // Fetch all posts
       var firestorePosts = await FirebaseFirestore.instance.collection('posts').get();
+      List<Post> fetchedPosts = [];
+      
+      // Fetch user details for each post and create Post objects
+      for (var doc in firestorePosts.docs) {
+        var postData = doc.data() as Map<String, dynamic>;
+        
+        // Check if user ID is available and fetch user details
+        if (postData.containsKey('userId') && postData['userId'] != null) {
+          var userDoc = await FirebaseFirestore.instance.collection('users').doc(postData['userId']).get();
+          var userData = userDoc.data() as Map<String, dynamic>;
+          
+          // Create a new post object with user details
+          fetchedPosts.add(Post.fromFirestoreWithUser(doc, userData));
+        }
+      }
+      
       setState(() {
-        allPosts = firestorePosts.docs.map((doc) => Post.fromFirestore(doc)).toList();
-        applyFilter(_tabController.index == 0 ? "Club" : "Social"); // Apply initial filter based on the current tab
+        allPosts = fetchedPosts;
+        applyFilter(_tabController.index == 0 ? "Club" : "Social"); // Apply filter based on the current tab
       });
     } catch (e) {
       print('Error fetching posts: $e');
