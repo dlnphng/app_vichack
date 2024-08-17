@@ -39,31 +39,19 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _loadUserData() async {
     try {
-      User? user = UserRepository.getCurrentUser();
+      User? user = _auth.currentUser; // Directly using FirebaseAuth
 
       if (user != null) {
         DocumentSnapshot userDoc = await _firestore.collection('users').doc(user.uid).get();
 
         if (userDoc.exists) {
-          Map<String, dynamic>? data = userDoc.data() as Map<String, dynamic>?;
-
-          String userName = data?['name'] ?? "No Name";
-          String userDescription = data?['description'] ?? "Mystery person...";
-          String? avatarUrl = data?['avatarUrl'];
-          String? backgroundUrl = data?['backgroundUrl'];
-
           setState(() {
-            _userName = userName;
-            _userDescription = userDescription;
-            _avatarUrl = avatarUrl;
-            _backgroundUrl = backgroundUrl;
+            _userName = userDoc.get('name') ?? "No Name";
+            _userDescription = userDoc.get('description') ?? "Mystery person...";
+            _avatarUrl = userDoc.get('avatarUrl');
+            _backgroundUrl = userDoc.get('backgroundUrl');
           });
         } else {
-          await _firestore.collection('users').doc(user.uid).set({
-            'name': "No User Data Found",
-            'description': _userDescription,
-          });
-
           setState(() {
             _userName = "No User Data Found";
           });
@@ -87,7 +75,7 @@ class _ProfilePageState extends State<ProfilePage> {
     });
 
     // Save the new description to Firestore
-    User? user = UserRepository.getCurrentUser();
+    User? user = _auth.currentUser;
     if (user != null) {
       await _firestore.collection('users').doc(user.uid).set({
         'description': newDescription,
@@ -101,7 +89,7 @@ class _ProfilePageState extends State<ProfilePage> {
     });
 
     // Save the new name to Firestore
-    User? user = UserRepository.getCurrentUser();
+    User? user = _auth.currentUser;
     if (user != null) {
       await _firestore.collection('users').doc(user.uid).set({
         'name': newName,
@@ -124,7 +112,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void fetchUserPosts() async {
-    User? user = UserRepository.getCurrentUser();
+    User? user = _auth.currentUser;
     if (user != null) {
       var userPostsSnapshot = await _firestore.collection('posts')
           .where('userId', isEqualTo: user.uid)
@@ -167,7 +155,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _updateAvatar(File file) async {
-    User? user = UserRepository.getCurrentUser();
+    User? user = _auth.currentUser;
     if (user != null) {
       String fileName = 'avatars/${user.uid}.jpg';
       Reference ref = _storage.ref().child(fileName);
@@ -197,7 +185,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _updateBackground(File file) async {
-    User? user = UserRepository.getCurrentUser();
+    User? user = _auth.currentUser;
     if (user != null) {
       String fileName = 'backgrounds/${user.uid}.jpg';
       Reference ref = _storage.ref().child(fileName);
