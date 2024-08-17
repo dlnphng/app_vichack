@@ -16,11 +16,11 @@ class Post {
   final String userImage;
   final String postTitle;
   final String postContent;
-  final String postImageUrl;
+  final List<String> postImageUrls;  // Change this to a list of strings
   final String category;
   final int likes;
   final int comments;
-  final List<String> eventTypes;  // Add this line
+  final List<String> eventTypes;
 
   Post({
     required this.id,
@@ -29,11 +29,11 @@ class Post {
     required this.userImage,
     required this.postTitle,
     required this.postContent,
-    required this.postImageUrl,
+    required this.postImageUrls,  // Adjust constructor
     required this.category,
     required this.likes,
     required this.comments,
-    required this.eventTypes,  // Add this line
+    required this.eventTypes,
   });
 
   factory Post.fromFirestoreWithUser(DocumentSnapshot postDoc, Map<String, dynamic> userData) {
@@ -45,20 +45,40 @@ class Post {
       userImage: userData['userImage'] ?? 'default_avatar.png',
       postTitle: postData['title'] ?? 'No Title',
       postContent: postData['content'] ?? '',
-      postImageUrl: postData['imageUrl'] ?? 'default_post_image.png',
+      postImageUrls: List<String>.from(postData['imageUrls'] ?? []),  // Get list of image URLs
       category: postData['category'] ?? 'General',
       likes: int.parse(postData['likeNo']?.toString() ?? '0'),
       comments: int.parse(postData['cmtNo']?.toString() ?? '0'),
       eventTypes: List<String>.from(postData['eventTypes'] ?? []),
     );
   }
-
 }
 
 class PostCard extends StatelessWidget {
   final Post post;
 
   const PostCard({Key? key, required this.post}) : super(key: key);
+
+  void _showImageGallery(BuildContext context, List<String> imageUrls, int initialPage) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+          ),
+          backgroundColor: Colors.black,
+          body: PageView.builder(
+            itemCount: imageUrls.length,
+            controller: PageController(initialPage: initialPage),
+            itemBuilder: (context, index) => InteractiveViewer(
+              child: Image.network(imageUrls[index], fit: BoxFit.contain),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -89,23 +109,11 @@ class PostCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                Icon(
-                  Icons.star
-                  // post.isFavorite ? Icons.star : Icons.star_border,
-                  // color: post.isFavorite ? Colors.amber : Colors.grey,
-                ),
+                Icon(Icons.star),
               ],
             ),
             SizedBox(height: 16.0),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12.0),
-              child: Image.network(
-                post.postImageUrl,
-                height: 200.0,
-                width: double.infinity,
-                fit: BoxFit.cover,
-              ),
-            ),
+            _buildImageDisplay(context),
             SizedBox(height: 16.0),
             Text(
               post.postTitle,
@@ -153,6 +161,104 @@ class PostCard extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildImageDisplay(BuildContext context) {
+    int imageCount = post.postImageUrls.length;
+
+    if (imageCount == 0) {  
+      return Container();  // Returns an empty container when there are no images
+    }
+
+    switch (imageCount) {
+      case 1:
+        return GestureDetector(
+          onTap: () => _showImageGallery(context, post.postImageUrls, 0),
+          child: Image.network(post.postImageUrls.first, fit: BoxFit.cover, width: double.infinity, height: 200),
+        );
+      case 2:
+        return Row(
+          children: post.postImageUrls.map((url) {
+            return Expanded(
+              child: GestureDetector(
+                onTap: () => _showImageGallery(context, post.postImageUrls, post.postImageUrls.indexOf(url)),
+                child: Image.network(url, fit: BoxFit.cover, height: 200),
+              ),
+            );
+          }).toList(),
+        );
+      case 3:
+        return Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () => _showImageGallery(context, post.postImageUrls, 0),
+                child: Image.network(post.postImageUrls[0], fit: BoxFit.cover, height: 300),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                children: [
+                  GestureDetector(
+                    onTap: () => _showImageGallery(context, post.postImageUrls, 1),
+                    child: Image.network(post.postImageUrls[1], fit: BoxFit.cover, height: 150),
+                  ),
+                  GestureDetector(
+                    onTap: () => _showImageGallery(context, post.postImageUrls, 2),
+                    child: Image.network(post.postImageUrls[2], fit: BoxFit.cover, height: 150),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      default:
+        return Stack(
+          alignment: Alignment.bottomRight,
+          children: [
+            Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => _showImageGallery(context, post.postImageUrls, 0),
+                        child: Image.network(post.postImageUrls[0], fit: BoxFit.cover, height: 300),
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          GestureDetector(
+                            onTap: () => _showImageGallery(context, post.postImageUrls, 1),
+                            child: Image.network(post.postImageUrls[1], fit: BoxFit.cover, height: 150),
+                          ),
+                          GestureDetector(
+                            onTap: () => _showImageGallery(context, post.postImageUrls, 2),
+                            child: Image.network(post.postImageUrls[2], fit: BoxFit.cover, height: 150),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            if (imageCount > 3) Container(
+              width: 165,
+              height: 150,  // Adjusted overlay height to match the image heights
+              color: Colors.black45,
+              child: Center(
+                child: Text(
+                  '+${imageCount - 3}',
+                  style: TextStyle(color: Colors.white, fontSize: 24),
+                ),
+              ),
+            ),
+          ],
+        );
+    }
+  }
+
 }
 
 // Home Page

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart';
 import 'login_page.dart';
 import 'home_page.dart';
@@ -43,43 +44,50 @@ class _CreatePostBottomSheetState extends State<CreatePostBottomSheet> {
     });
   }
 
-  void _submitPost() async {
-    if (_titleController.text.isEmpty || _contentController.text.isEmpty || _selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please fill in all fields and select a category.")));
-      return;
-    }
+void _submitPost() async {
+  if (_titleController.text.isEmpty || _contentController.text.isEmpty || _selectedCategory == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Please fill in all fields and select a category.")));
+    return;
+  }
 
-    // Fetch current user from the provider
-    var currentUser = Provider.of<UserProvider>(context, listen: false).user;
-    if (currentUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("No user logged in")));
-      return;
+  var currentUser = Provider.of<UserProvider>(context, listen: false).user;
+  if (currentUser == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("No user logged in")));
+    return;
+  }
+
+  try {
+    List<String> imageUrls = [];
+    for (var image in _images) {
+      // Upload each image and store the download URLs
+      var fileRef = FirebaseStorage.instance.ref('post_images/${image.name}');
+      await fileRef.putFile(File(image.path));
+      String downloadUrl = await fileRef.getDownloadURL();
+      imageUrls.add(downloadUrl);
     }
 
     CollectionReference posts = FirebaseFirestore.instance.collection('posts');
+    await posts.add({
+      'userId': currentUser.id,
+      'title': _titleController.text,
+      'content': _contentController.text,
+      'category': _selectedCategory,
+      'eventTypes': _selectedEventTypes,
+      'timestamp': FieldValue.serverTimestamp(),
+      'likeNo': 0,
+      'cmtNo': 0,
+      'imageUrls': imageUrls,  // Store image URLs in an array
+    });
 
-    try {
-      // Add post details to Firestore with the user ID
-      await posts.add({
-        'userId': currentUser.id,  // Include the user's ID
-        'title': _titleController.text,
-        'content': _contentController.text,
-        'category': _selectedCategory,
-        'eventTypes': _selectedEventTypes,
-        'timestamp': FieldValue.serverTimestamp(),
-        'likeNo': 0,
-        'cmtNo': 0,
-      });
-
-      Navigator.pop(context); // Close the bottom sheet after successful submission
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Post uploaded successfully!")));
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to upload post: ${e.toString()}")));
-      print("Error during post submission: $e");
-    }
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Post uploaded successfully!")));
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to upload post: ${e.toString()}")));
+    print("Error during post submission: $e");
   }
+}
 
   Widget _buildImageList() {
     return SingleChildScrollView(
