@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 import 'login_page.dart';
 import 'home_page.dart';
 
@@ -13,52 +16,77 @@ class UserSettingPage extends StatefulWidget {
 
 class _UserSettingPageState extends State<UserSettingPage> {
   String? _userName;
-  String? _avatarUrl;
+  String? _userImage;
+  final ImagePicker _picker = ImagePicker();
+  TextEditingController _nameController = TextEditingController();
+  TextEditingController _universityController = TextEditingController();
+  TextEditingController _descriptionController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _nameController.text = _userName ?? '';
   }
 
   void _loadUserData() async {
-  User? user = FirebaseAuth.instance.currentUser;
-
-  if (user != null) {
-    DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-
-    if (userDoc.exists) {
-      final data = userDoc.data() as Map<String, dynamic>?;  // Cast data to Map<String, dynamic>
-      print("User data: $data");  // Debug output
-
-      setState(() {
-        _userName = data?['name'] ?? 'User Name';
-        _avatarUrl = data?['avatarUrl'];
-      });
-
-      print("Loaded userName: $_userName, avatarUrl: $_avatarUrl");  // Debug output
-    } else {
-      print("User document does not exist.");
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (userDoc.exists) {
+        final data = userDoc.data() as Map<String, dynamic>?;
+        setState(() {
+          _userName = data?['name'];
+          _userImage = data?['userImage'];
+          _nameController.text = data?['name'] ?? ''; // Set name
+          _universityController.text = data?['university'] ?? ''; // Set university
+          _descriptionController.text = data?['description'] ?? ''; // Set description or empty if null
+        });
+      }
     }
-  } else {
-    print("No authenticated user found.");
   }
-}
 
+    Future<void> _updateUserProfile(BuildContext context) async {
+      String userId = FirebaseAuth.instance.currentUser!.uid;
+      await FirebaseFirestore.instance.collection('users').doc(userId).update({
+        'name': _nameController.text,
+        'university': _universityController.text,
+        'description': _descriptionController.text
+      });
+      Navigator.pop(context); // Optionally refresh or pop the page
+  }
 
+  Future<void> _changeProfileImage() async {
+    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      File imageFile = File(pickedFile.path);
+      String userId = FirebaseAuth.instance.currentUser!.uid;
+      String filePath = 'user_profiles/$userId/avatar.png';
+
+      // Upload to Firebase Storage
+      try {
+        await FirebaseStorage.instance.ref(filePath).putFile(imageFile);
+        String downloadUrl = await FirebaseStorage.instance.ref(filePath).getDownloadURL();
+
+        // Update Firestore user document
+        await FirebaseFirestore.instance.collection('users').doc(userId).update({'userImage': downloadUrl});
+
+        // Update local state to reflect the new image
+        setState(() {
+          _userImage = downloadUrl;
+        });
+      } catch (e) {
+        print("Error uploading image: $e");
+      }
+    }
+  }
 
   void _logout(BuildContext context) async {
-    // Sign out from Firebase
     await FirebaseAuth.instance.signOut();
-
-    // Clear the stored user credentials
-    UserRepository.clearUserCredential();
-
-    // After signing out, redirect to the login page
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => const LoginPage()),
-      (Route<dynamic> route) => false, // Removes all the previous routes
+      ModalRoute.withName('/'),
     );
   }
 
@@ -67,71 +95,75 @@ class _UserSettingPageState extends State<UserSettingPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('User Settings'),
-        backgroundColor: const Color.fromARGB(255, 255, 193, 86), // Customize the color if needed
+        backgroundColor: const Color.fromARGB(255, 255, 193, 86),
       ),
       body: SingleChildScrollView(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          height: MediaQuery.of(context).size.height,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(height: 20),
-              Column(
-                children: [
-                  // Display the user avatar
-                  CircleAvatar(
-                    radius: 60,
-                    backgroundImage: _avatarUrl != null 
-                        ? NetworkImage(_avatarUrl!) 
-                        : null,  // If _avatarUrl is not null, display the image
-                    backgroundColor: Color.fromARGB(255, 252, 186, 85),
-                    child: _avatarUrl == null 
-                        ? const Icon(
-                            Icons.account_circle, 
-                            size: 120, 
-                            color: Colors.white,
-                          ) 
-                        : null,  // If _avatarUrl is null, display a default icon
-                  ),
-                  const SizedBox(height: 20),
-                  // Display the user name
-                  Text(
-                    _userName ?? 'User Name',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              // Logout button at the bottom, full width
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => _logout(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color.fromARGB(255, 255, 193, 86), // Customize the button color
-                    padding: const EdgeInsets.symmetric(vertical: 15), // Adjust the padding for height
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: const Text(
-                    'Logout',
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.white,
-                    ),
-                  ),
+              GestureDetector(
+                onTap: _changeProfileImage,
+                child: CircleAvatar(
+                  radius: 60,
+                  backgroundImage: _userImage != null ? NetworkImage(_userImage!) : null,
+                  backgroundColor: Colors.deepOrange[300],
+                  child: _userImage == null ? const Icon(Icons.add_a_photo, size: 60, color: Colors.white) : null,
                 ),
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 20),
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              TextFormField(
+                controller: _universityController,
+                decoration: const InputDecoration(labelText: 'University'),
+              ),
+              TextFormField(
+                controller: _descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  alignLabelWithHint: true,
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => _updateUserProfile(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color.fromARGB(255, 255, 193, 86),
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 24),
+                  shape: RoundedRectangleBorder( // Rounded corners consistent with the logout button
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+                ),
+                child: const Text('Update Profile', style: TextStyle(fontSize: 18, color: Colors.white)),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => _logout(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color.fromARGB(255, 255, 193, 86),
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 24),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(25), // Ensure consistency in rounding
+                  ),
+                ),
+                child: const Text(
+                  'Logout',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.white,
+                  ),
+                ),
+              )
             ],
           ),
         ),
       ),
     );
   }
+
 }

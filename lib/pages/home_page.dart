@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'custom_drawer.dart';
 import 'create_post_bottom_sheet.dart';
@@ -371,20 +372,40 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_handleTabSelection);
     fetchPosts();
+      // Listen to filter changes
+    Provider.of<PostFilterProvider>(context, listen: false).addListener(_applyFilter);
+  }
+
+  void _applyFilter() {
+    final filterType = Provider.of<PostFilterProvider>(context, listen: false).filterType;
+    setState(() {
+      if (filterType == null || filterType.isEmpty) {
+        displayedPosts = allPosts.where((post) => post.category == "Club").toList();
+      } else {
+        displayedPosts = allPosts.where((post) => post.category == "Club" && post.eventTypes.contains(filterType)).toList();
+      }
+    });
   }
 
   void _handleTabSelection() {
-    if (_tabController.indexIsChanging) {
-      applyFilter(_tabController.index == 0 ? "Club" : "Social");
-    }
+    setState(() {
+      if (_tabController.index == 0) {
+        // Club tab
+        _applyFilter();
+      } else {
+        // Social tab
+        displayedPosts = allPosts.where((post) => post.category == "Social").toList();
+      }
+    });
   }
 
   void applyFilter(String? filterType) {
+    final filterType = Provider.of<PostFilterProvider>(context, listen: false).filterType;
     setState(() {
       if (filterType == null) {
         displayedPosts = allPosts;
       } else {
-        displayedPosts = allPosts.where((post) => post.category == filterType).toList();
+        displayedPosts = allPosts.where((post) => post.eventTypes.contains(filterType)).toList();
       }
     });
   }
@@ -416,7 +437,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
       setState(() {
         allPosts = fetchedPosts;
-        applyFilter(_tabController.index == 0 ? "Club" : "Social");
+        _applyFilter();  // Apply filter after fetching posts
       });
     } catch (e) {
       print('Error fetching posts: $e');
@@ -697,9 +718,6 @@ class PostResults extends StatelessWidget {
   }
 }
 
-
-
-
 class UserCard extends StatelessWidget {
   final SearchUserModel user;
 
@@ -738,7 +756,6 @@ class UserCard extends StatelessWidget {
     );
   }
 }
-
 
 class SearchUserModel {
   final String id;

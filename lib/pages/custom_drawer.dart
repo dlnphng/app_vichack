@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'home_page.dart'; // Make sure this path is correct and imports the necessary provider
 
 class CustomDrawer extends StatelessWidget {
   const CustomDrawer({Key? key}) : super(key: key);
@@ -12,38 +13,37 @@ class CustomDrawer extends StatelessWidget {
         children: <Widget>[
           SizedBox(height: 60),  // Space at the top
           ListTile(
-            title: const Text('All events'),
+            title: const Text('All Club Events'),
             onTap: () {
-              Navigator.pop(context);
-              // Trigger the event type filter
+              Navigator.pop(context);  // Close the drawer
               Provider.of<PostFilterProvider>(context, listen: false).setFilter(null);
             },
           ),
           ListTile(
-            title: const Text('IT events'),
+            title: const Text('IT Events'),
             onTap: () {
-              Navigator.pop(context);
+              Navigator.pop(context);  // Close the drawer
               Provider.of<PostFilterProvider>(context, listen: false).setFilter('IT');
             },
           ),
           ListTile(
-            title: const Text('Law events'),
+            title: const Text('Law Events'),
             onTap: () {
-              Navigator.pop(context);
+              Navigator.pop(context);  // Close the drawer
               Provider.of<PostFilterProvider>(context, listen: false).setFilter('Law');
             },
           ),
           ListTile(
-            title: const Text('Business events'),
+            title: const Text('Business Events'),
             onTap: () {
-              Navigator.pop(context);
+              Navigator.pop(context);  // Close the drawer
               Provider.of<PostFilterProvider>(context, listen: false).setFilter('Business');
             },
           ),
           ListTile(
-            title: const Text('Engineering events'),
+            title: const Text('Engineering Events'),
             onTap: () {
-              Navigator.pop(context);
+              Navigator.pop(context);  // Close the drawer
               Provider.of<PostFilterProvider>(context, listen: false).setFilter('Engineering');
             },
           ),
@@ -55,11 +55,11 @@ class CustomDrawer extends StatelessWidget {
 
 class PostFilterProvider with ChangeNotifier {
   String? _filterType;
+
   String? get filterType => _filterType;
 
   void setFilter(String? type) {
     _filterType = type;
-    notifyListeners();
+    notifyListeners();  // Notify listeners about the change
   }
 }
-

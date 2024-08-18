@@ -1,9 +1,11 @@
-import 'package:app_vichack/pages/login_page.dart';
 import 'package:flutter/material.dart';
-import 'pages/home_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:provider/provider.dart';  // Import the provider package
 import 'firebase_options.dart';
+import 'pages/home_page.dart';
+import 'pages/login_page.dart';
+import 'pages/custom_drawer.dart';  // Import your CustomDrawer file
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,9 +21,12 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: AuthStateHandler(), // Handle first screen based on auth state
+    return ChangeNotifierProvider(
+      create: (context) => PostFilterProvider(),
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: AuthStateHandler(), // Handle first screen based on auth state
+      ),
     );
   }
 }

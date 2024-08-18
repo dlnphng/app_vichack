@@ -7,8 +7,8 @@ import 'home_page.dart'; // Import your Post and Comment models
 
 class Comment {
   final String userId;
-  final String userName;
-  final String userImage;
+  String userName; // Made mutable
+  String userImage; // Made mutable
   final String comment;
   final DateTime timestamp;
 
@@ -34,7 +34,7 @@ class Comment {
     return {
       'userId': userId,
       'userName': userName,
-      // 'userImage': userImage,
+      'userImage': userImage,
       'comment': comment,
       'timestamp': Timestamp.fromDate(timestamp),
     };
@@ -53,71 +53,42 @@ class CommentScreen extends StatefulWidget {
 class _CommentScreenState extends State<CommentScreen> {
   final TextEditingController _commentController = TextEditingController();
   List<Comment> _comments = [];
-  int _commentCount = 0;
   bool isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _comments = List.from(widget.post.commentList); // Initialize with existing comments
-    _commentCount = widget.post.comments; // Initialize with the current comment count
+    _fetchComments();
   }
 
-  Future<void> _postComment() async {
-    final userId =     UserRepository.getCurrentUser()?.uid;
-    final userName =      UserRepository.getCurrentUser()?.name;
-    // final userImage =     UserRepository.getCurrentUser()?.usserI;
-
-
-    if (userId == null || userName == null|| _commentController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to send comment: Missing user information or comment text")),
-      );
-      return;
-    }
-
+  Future<void> _fetchComments() async {
     setState(() {
       isLoading = true;
     });
 
-    final postRef = FirebaseFirestore.instance.collection('posts').doc(widget.post.id);
-
     try {
-      Comment newComment = Comment(
-        userId: userId,
-        userName: userName,
-        userImage: 'default_avatar.png',
-        comment: _commentController.text,
-        timestamp: DateTime.now(),
-      );
+      DocumentSnapshot postSnapshot = await FirebaseFirestore.instance.collection('posts').doc(widget.post.id).get();
+      if (postSnapshot.exists) {
+        List<dynamic> commentsData = postSnapshot['commentList'] ?? [];
+        List<Comment> fetchedComments = [];
 
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        DocumentSnapshot postSnapshot = await transaction.get(postRef);
-        if (!postSnapshot.exists) {
-          throw Exception("Post not found!");
+        for (var commentData in commentsData) {
+          Comment comment = Comment.fromMap(commentData);
+          DocumentSnapshot userSnapshot = await FirebaseFirestore.instance.collection('users').doc(comment.userId).get();
+          if (userSnapshot.exists) {
+            comment.userName = userSnapshot['name'] ?? 'Unknown User';
+            comment.userImage = userSnapshot['userImage'] ?? 'default_avatar.png';
+          }
+          fetchedComments.add(comment);
         }
 
-        List<dynamic> comments = postSnapshot['commentsList'] ?? [];
-        comments.add(newComment.toMap());
-
-        transaction.update(postRef, {
-          'commentsList': comments,
-          'cmtNo': FieldValue.increment(1),
+        setState(() {
+          _comments = fetchedComments;
         });
-      });
-
-      setState(() {
-        _comments.add(newComment); // Add to the local state list
-        _commentCount += 1;  // Increment the local comment count
-        _commentController.clear(); // Clear the text field
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Comment sent successfully!")),
-      );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to send comment: ${e.toString()}")),
+        SnackBar(content: Text("Failed to load comments: ${e.toString()}"))
       );
     } finally {
       setState(() {
@@ -126,34 +97,104 @@ class _CommentScreenState extends State<CommentScreen> {
     }
   }
 
+  Future<void> _postComment() async {
+    User? user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("You must be logged in to comment."))
+      );
+      return;
+    }
+
+    if (_commentController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Comment cannot be empty"))
+      );
+      return;
+    }
+
+    try {
+      DocumentSnapshot userSnapshot = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (!userSnapshot.exists) {
+        throw Exception("User not found!");
+      }
+
+      Comment newComment = Comment(
+        userId: user.uid,
+        userName: userSnapshot['name'] ?? "Anonymous",
+        userImage: userSnapshot['userImage'] ?? 'path/to/default_avatar.png',
+        comment: _commentController.text.trim(),
+        timestamp: DateTime.now()
+      );
+
+      DocumentReference postRef = FirebaseFirestore.instance.collection('posts').doc(widget.post.id);
+      FirebaseFirestore.instance.runTransaction((transaction) async {
+        DocumentSnapshot postSnapshot = await transaction.get(postRef);
+        if (!postSnapshot.exists) {
+          throw Exception("Post not found!");
+        }
+        List<dynamic> comments = List.from(postSnapshot['commentList'] ?? []);
+        comments.add(newComment.toMap());
+        transaction.update(postRef, {
+          'commentList': comments,
+          'cmtNo': FieldValue.increment(1) // Increment the comment count
+        });
+      });
+
+      setState(() {
+        _comments.add(newComment);
+        _commentController.clear();
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Comment posted successfully!"))
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to post comment: ${e.toString()}"))
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Comments'),
-      ),
-      body: Column(
-        children: [
-          if (isLoading)
-            const LinearProgressIndicator(),
-          Expanded(child: buildCommentsSection()),
-          buildCommentInputField(),
-        ],
-      ),
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (!snapshot.hasData) {
+          return Scaffold(
+            body: Center(
+              child: Text("Please log in to view and post comments."),
+            ),
+          );
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Text('Comments'),
+          ),
+          body: Column(
+            children: [
+              if (isLoading) const LinearProgressIndicator(),
+              Expanded(child: buildCommentsSection()),
+              buildCommentInputField(),
+            ],
+          ),
+        );
+      },
     );
   }
 
   Widget buildCommentsSection() {
     if (_comments.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: Center(
-          child: Text(
-            "No comments yet. Be the first to comment!",
-            style: TextStyle(color: Colors.grey),
-          ),
-        ),
-      );
+      return Center(child: Text("No comments yet. Be the first to comment!"));
     }
 
     return ListView.builder(
@@ -161,14 +202,18 @@ class _CommentScreenState extends State<CommentScreen> {
       itemBuilder: (context, index) {
         final comment = _comments[index];
         return ListTile(
-          // leading: CircleAvatar(
-          //   backgroundImage: NetworkImage(comment.userImage),
-          // ),
-          title: Text(comment.userName),
+          leading: CircleAvatar(
+            backgroundImage: NetworkImage(comment.userImage),
+            backgroundColor: Colors.grey[200],
+          ),
+          title: Text(
+            comment.userName,
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           subtitle: Text(comment.comment),
           trailing: Text(
             TimeOfDay.fromDateTime(comment.timestamp).format(context),
-            style: TextStyle(fontSize: 12.0),
+            style: TextStyle(fontSize: 12.0, color: Colors.grey),
           ),
         );
       },
@@ -201,6 +246,7 @@ class _CommentScreenState extends State<CommentScreen> {
     );
   }
 }
+
 
 extension on User? {
    get name => null;
