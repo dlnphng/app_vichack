@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
@@ -33,7 +34,7 @@ class Comment {
     return {
       'userId': userId,
       'userName': userName,
-      'userImage': userImage,
+      // 'userImage': userImage,
       'comment': comment,
       'timestamp': Timestamp.fromDate(timestamp),
     };
@@ -63,9 +64,10 @@ class _CommentScreenState extends State<CommentScreen> {
   }
 
   Future<void> _postComment() async {
-    final userId = Provider.of<UserProvider>(context, listen: false).user?.id;
-    final userName = Provider.of<UserProvider>(context, listen: false).user?.name;
-    final userImage = Provider.of<UserProvider>(context, listen: false).user?.userImage;
+    final userId =     UserRepository.getCurrentUser()?.uid;
+    final userName =      UserRepository.getCurrentUser()?.name;
+    // final userImage =     UserRepository.getCurrentUser()?.usserI;
+
 
     if (userId == null || userName == null|| _commentController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -84,7 +86,7 @@ class _CommentScreenState extends State<CommentScreen> {
       Comment newComment = Comment(
         userId: userId,
         userName: userName,
-        userImage: userImage,
+        userImage: 'default_avatar.png',
         comment: _commentController.text,
         timestamp: DateTime.now(),
       );
@@ -159,9 +161,9 @@ class _CommentScreenState extends State<CommentScreen> {
       itemBuilder: (context, index) {
         final comment = _comments[index];
         return ListTile(
-          leading: CircleAvatar(
-            backgroundImage: NetworkImage(comment.userImage),
-          ),
+          // leading: CircleAvatar(
+          //   backgroundImage: NetworkImage(comment.userImage),
+          // ),
           title: Text(comment.userName),
           subtitle: Text(comment.comment),
           trailing: Text(
@@ -198,4 +200,8 @@ class _CommentScreenState extends State<CommentScreen> {
       ),
     );
   }
+}
+
+extension on User? {
+   get name => null;
 }

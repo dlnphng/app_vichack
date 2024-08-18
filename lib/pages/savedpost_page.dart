@@ -23,7 +23,7 @@ class _SavedPostsPageState extends State<SavedPostsPage> with SingleTickerProvid
   }
 
   void fetchSavedPosts() async {
-    final userId = Provider.of<UserProvider>(context, listen: false).user?.id;
+    final userId = UserRepository.getCurrentUser()?.uid;
     if (userId == null) return;
 
     final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();

@@ -1,14 +1,13 @@
-import 'package:app_vichack/pages/profile_page.dart';
-import 'package:app_vichack/pages/user_setting_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:provider/provider.dart';
 import 'custom_drawer.dart';
 import 'create_post_bottom_sheet.dart';
 import 'savedpost_page.dart';
-import 'login_page.dart';
+import 'profile_page.dart';
 import 'comment.dart';
+import 'user_setting_page.dart';
+import 'login_page.dart';
 
 class Post {
   final String id;
@@ -77,7 +76,7 @@ class _PostCardState extends State<PostCard> {
   }
 
   void checkIfSaved() async {
-    final userId = Provider.of<UserProvider>(context, listen: false).user?.id;
+    final userId = UserRepository.getCurrentUser()?.uid;
     if (userId == null) return;
 
     final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
@@ -89,7 +88,7 @@ class _PostCardState extends State<PostCard> {
   }
 
   Future<void> toggleSavePost() async {
-    final userId = Provider.of<UserProvider>(context, listen: false).user?.id;
+    final userId = UserRepository.getCurrentUser()?.uid;
     if (userId == null) return;
 
     final userDocRef = FirebaseFirestore.instance.collection('users').doc(userId);
@@ -372,7 +371,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   void _navigateToSavedPosts() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => SavedPostsPage()), // Navigate to SavedPostsPage
+      MaterialPageRoute(builder: (context) => SavedPostsPage()),
     );
   }
 
@@ -463,8 +462,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           IconButton(
             icon: const Icon(Icons.account_circle, color: Colors.black),
             onPressed: () {
-              // Handle user avatar icon press
-              // Navigate to the ProfileSettingPage when the avatar icon is pressed
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const UserSettingPage()),
@@ -525,8 +522,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               child: IconButton(
                 icon: const Icon(Icons.home),
                 onPressed: () {
-                  // Handle home icon press
-                  print("home button pressed");
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => const ProfilePage()),

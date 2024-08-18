@@ -52,7 +52,7 @@ class _CreatePostBottomSheetState extends State<CreatePostBottomSheet> {
       return;
     }
 
-    var currentUser = Provider.of<UserProvider>(context, listen: false).user;
+    var currentUser = UserRepository.getCurrentUser();
     if (currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("No user logged in")),
@@ -82,7 +82,7 @@ class _CreatePostBottomSheetState extends State<CreatePostBottomSheet> {
 
       CollectionReference posts = FirebaseFirestore.instance.collection('posts');
       await posts.add({
-        'userId': currentUser.id,
+        'userId': currentUser.uid,
         'title': _titleController.text,
         'content': _contentController.text,
         'category': _selectedCategory,

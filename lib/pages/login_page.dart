@@ -166,6 +166,35 @@ void _login() async {
   }
 }
 
+class UserProvider with ChangeNotifier {
+  UserModel? _user;
+
+  UserModel? get user => _user;
+
+  void setUser(UserModel user) {
+    _user = user;
+    notifyListeners();
+  }
+}
+
+class UserModel {
+  final String id;
+  final String email;
+
+  UserModel({required this.id, required this.email});
+
+  factory UserModel.fromFirebaseUser(User user) {
+    return UserModel(
+      id: user.uid,
+      email: user.email ?? '',
+    );
+  }
+
+  get name => null;
+
+  get userImage => null;
+}
+
 class UserRepository {
   static UserCredential? _userCredential;
   static User? _currentUser;
