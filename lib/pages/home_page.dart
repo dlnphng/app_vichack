@@ -68,10 +68,12 @@ class PostCard extends StatefulWidget {
 
 class _PostCardState extends State<PostCard> {
   bool isSaved = false;
+  int currentLikes = 0;  // Local state to track likes count
 
   @override
   void initState() {
     super.initState();
+    currentLikes = widget.post.likes;  // Initialize with the post's likes count from the widget
     checkIfSaved();
   }
 
@@ -92,28 +94,45 @@ class _PostCardState extends State<PostCard> {
     if (userId == null) return;
 
     final userDocRef = FirebaseFirestore.instance.collection('users').doc(userId);
+    final postDocRef = FirebaseFirestore.instance.collection('posts').doc(widget.post.id);
+
+    bool wasSaved = isSaved;  // Track the initial saved state
+
+    setState(() {  // Update the local state immediately for responsive UI
+      if (isSaved) {
+        isSaved = false;
+        currentLikes--;  // Decrement likes if un-saved
+      } else {
+        isSaved = true;
+        currentLikes++;  // Increment likes if saved
+      }
+    });
 
     FirebaseFirestore.instance.runTransaction((transaction) async {
       DocumentSnapshot userDocSnapshot = await transaction.get(userDocRef);
-      if (!userDocSnapshot.exists) {
-        throw Exception("User not found!");
+      DocumentSnapshot postDocSnapshot = await transaction.get(postDocRef);
+
+      if (!userDocSnapshot.exists || !postDocSnapshot.exists) {
+        throw Exception("User or Post not found!");
       }
 
       List<dynamic> savedPosts = userDocSnapshot['savedPosts'] ?? [];
 
-      if (savedPosts.contains(widget.post.id)) {
+      if (wasSaved) {
+        // Remove from saved posts and decrement likes
         transaction.update(userDocRef, {
           'savedPosts': FieldValue.arrayRemove([widget.post.id])
         });
-        setState(() {
-          isSaved = false;
+        transaction.update(postDocRef, {
+          'likeNo': FieldValue.increment(-1)
         });
       } else {
+        // Add to saved posts and increment likes
         transaction.update(userDocRef, {
           'savedPosts': FieldValue.arrayUnion([widget.post.id])
         });
-        setState(() {
-          isSaved = true;
+        transaction.update(postDocRef, {
+          'likeNo': FieldValue.increment(1)
         });
       }
     });
