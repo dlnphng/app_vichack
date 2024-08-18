@@ -132,7 +132,16 @@ class _ProfilePageState extends State<ProfilePage> {
       var userPostsSnapshot = await _firestore.collection('posts')
           .where('userId', isEqualTo: user.uid)
           .get();
-      var fetchedPosts = userPostsSnapshot.docs.map((doc) => Post.fromFirestore(doc)).toList();
+      
+      List<Post> fetchedPosts = [];
+      for (var doc in userPostsSnapshot.docs) {
+        var postData = doc.data() as Map<String, dynamic>;
+        // Since all posts are from the same user, we fetch the user data once outside the loop
+        var userDoc = await _firestore.collection('users').doc(user.uid).get();
+        var userData = userDoc.data() as Map<String, dynamic> ?? {};
+        
+        fetchedPosts.add(Post.fromFirestoreWithUser(doc, userData)); // Now passing both parameters
+      }
 
       setState(() {
         userPosts = fetchedPosts;
