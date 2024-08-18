@@ -11,6 +11,8 @@ The idea for UniN was born out of the frustration many students experience when 
 **Installation and Setup**
 > Prerequisites: Flutter SDK - Ensure that Flutter is installed on your development machine. Follow the official Flutter installation guide for instructions.
 
+> Please run this on homepage1 branch
+
 > Install dependencies: flutter pub get
 
 > Run the app: flutter run
