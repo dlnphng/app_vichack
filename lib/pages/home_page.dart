@@ -344,6 +344,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   List<Post> displayedPosts = [];
   bool isLoading = false;
 
+  TextEditingController _searchController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -439,24 +441,28 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             );
           },
         ),
-        title: Container(
-          height: 25,
-          child: TextField(
-            decoration: InputDecoration(
-              prefixIcon: SizedBox(
-                width: 15,
-                child: Icon(Icons.search, color: Colors.grey, size: 24),
-              ),
-              hintText: 'Search...',
-              filled: true,
-              fillColor: Colors.grey[200],
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: EdgeInsets.symmetric(horizontal: 8),
+        title: TextField(
+          controller: _searchController,  // Use the TextEditingController here
+          decoration: InputDecoration(
+            prefixIcon: SizedBox(
+              width: 15,
+              child: Icon(Icons.search, color: Colors.grey, size: 24),
             ),
+            hintText: 'Search...',
+            filled: true,
+            fillColor: Colors.grey[200],
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: EdgeInsets.symmetric(horizontal: 8),
           ),
+          onSubmitted: (query) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => SearchResultsPage(searchQuery: query)),
+            );
+          },
         ),
         actions: <Widget>[
           IconButton(
@@ -542,3 +548,197 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     );
   }
 }
+
+
+
+//Search Bar Page
+class SearchResultsPage extends StatefulWidget {
+  final String searchQuery;
+
+  SearchResultsPage({Key? key, required this.searchQuery}) : super(key: key);
+
+  @override
+  _SearchResultsPageState createState() => _SearchResultsPageState();
+}
+
+class _SearchResultsPageState extends State<SearchResultsPage> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Search Results'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: [
+            Tab(text: 'Users'),
+            Tab(text: 'Posts'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          UserResults(searchQuery: widget.searchQuery),
+          PostResults(searchQuery: widget.searchQuery),
+        ],
+      ),
+    );
+  }
+}
+
+class UserResults extends StatelessWidget {
+  final String searchQuery;
+
+  UserResults({required this.searchQuery});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .where('name', isGreaterThanOrEqualTo: searchQuery)
+          .where('name', isLessThanOrEqualTo: searchQuery + '\uf8ff')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(child: Text('No users found.'));
+        }
+        return ListView.builder(
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            SearchUserModel user = SearchUserModel.fromDocumentSnapshot(snapshot.data!.docs[index]);
+            return UserCard(user: user);
+          },
+        );
+      },
+    );
+  }
+}
+
+class PostResults extends StatelessWidget {
+  final String searchQuery;
+
+  PostResults({required this.searchQuery});
+
+  @override
+  Widget build(BuildContext context) {
+    Stream<QuerySnapshot> stream;
+
+    if (searchQuery.isEmpty) {
+      stream = FirebaseFirestore.instance.collection('posts').snapshots();
+    } else {
+      // This adjusts the query to look for titles that start with the search query
+      stream = FirebaseFirestore.instance
+          .collection('posts')
+          .orderBy('title') // Ensure 'postTitle' is indexed in your Firestore
+          .startAt([searchQuery])
+          .endAt([searchQuery + '\uf8ff'])
+          .snapshots();
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(child: Text('No posts found.'));
+        }
+
+        return ListView.builder(
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            DocumentSnapshot doc = snapshot.data!.docs[index];
+            return FutureBuilder<DocumentSnapshot>(
+              future: FirebaseFirestore.instance.collection('users').doc(doc['userId']).get(),
+              builder: (context, userSnapshot) {
+                if (!userSnapshot.hasData) {
+                  return Center(child: CircularProgressIndicator());
+                }
+                Post post = Post.fromFirestoreWithUser(doc, userSnapshot.data!.data() as Map<String, dynamic>);
+                return PostCard(post: post);
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+
+
+
+class UserCard extends StatelessWidget {
+  final SearchUserModel user;
+
+  const UserCard({Key? key, required this.user}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.all(16.0),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16.0),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              radius: 24.0,
+              backgroundImage: NetworkImage(user.userImage),
+              backgroundColor: Colors.transparent,
+            ),
+            SizedBox(width: 12.0),
+            Expanded(
+              child: Text(
+                user.name,
+                style: TextStyle(
+                  fontSize: 16.0,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class SearchUserModel {
+  final String id;
+  final String name;
+  final String userImage;
+
+  SearchUserModel({
+    required this.id,
+    required this.name,
+    required this.userImage,
+  });
+
+  factory SearchUserModel.fromDocumentSnapshot(DocumentSnapshot doc) {
+    var data = doc.data() as Map<String, dynamic>;
+    return SearchUserModel(
+      id: doc.id,
+      name: data['name'] ?? 'Unknown',
+      userImage: data['userImage'] ?? 'default_avatar.png',
+    );
+  }
+}
+

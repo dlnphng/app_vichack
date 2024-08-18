@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -198,26 +199,33 @@ class UserModel {
 class UserRepository {
   static UserCredential? _userCredential;
   static User? _currentUser;
+  static Map<String, dynamic>? _userData;
 
-  // record user credential
-  static void saveUserCredential(UserCredential credential) {
+  static Future<void> saveUserCredential(UserCredential credential) async {
     _userCredential = credential;
     _currentUser = FirebaseAuth.instance.currentUser;
+
+    if (_currentUser != null) {
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUser!.uid)
+          .get();
+      _userData = userDoc.data() as Map<String, dynamic>?;
+    }
   }
 
-  // login credential
-  static UserCredential? getUserCredential() {
-    return _userCredential;
-  }
-
-  // get curreny user
   static User? getCurrentUser() {
     return _currentUser;
   }
 
-  // for log out
+  static Map<String, dynamic>? getUserData() {
+    return _userData;
+  }
+
   static void clearUserCredential() {
     _userCredential = null;
     _currentUser = null;
+    _userData = null;
   }
 }
+
